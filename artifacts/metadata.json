@@ -1,0 +1,46 @@
+{
+  "model_name": "breast-cancer-svm-rbf",
+  "model_version": "1.0.0",
+  "feature_names": [
+    "mean radius",
+    "mean texture",
+    "mean perimeter",
+    "mean area",
+    "mean smoothness",
+    "mean compactness",
+    "mean concavity",
+    "mean concave points",
+    "mean symmetry",
+    "mean fractal dimension",
+    "radius error",
+    "texture error",
+    "perimeter error",
+    "area error",
+    "smoothness error",
+    "compactness error",
+    "concavity error",
+    "concave points error",
+    "symmetry error",
+    "fractal dimension error",
+    "worst radius",
+    "worst texture",
+    "worst perimeter",
+    "worst area",
+    "worst smoothness",
+    "worst compactness",
+    "worst concavity",
+    "worst concave points",
+    "worst symmetry",
+    "worst fractal dimension"
+  ],
+  "class_mapping": {
+    "0": "malignant",
+    "1": "benign"
+  },
+  "best_params": {
+    "svc__C": 10,
+    "svc__gamma": 0.01
+  },
+  "sklearn_version": "1.9.1",
+  "warning": "Educational use only - not a medical diagnosis."
+}
