@@ -4,8 +4,8 @@ import joblib
 import numpy as np
 from datetime import datetime
 from typing import List, Optional
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from passlib.context import CryptContext
@@ -15,7 +15,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 app = FastAPI(
     title="Doctor Portal - Breast Cancer SVM Diagnostic System",
     description="Hệ thống hỗ trợ chẩn đoán dành cho Bác sĩ",
-    version="2.2.0"
+    version="2.4.0"
 )
 
 app.add_middleware(
@@ -26,45 +26,63 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "..", "artifacts", "doctor_portal.db")
+# Đường dẫn DB an toàn trên Render (ưu tiên /tmp nếu chạy trên Linux/Render)
+if os.name == 'nt':
+    DB_PATH = os.path.join(os.path.dirname(__file__), "..", "artifacts", "doctor_portal.db")
+else:
+    DB_PATH = "/tmp/doctor_portal.db"
+
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "artifacts", "breast_cancer_svm.joblib")
 
 def get_db():
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    dirname = os.path.dirname(DB_PATH)
+    if dirname:
+        os.makedirs(dirname, exist_ok=True)
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     return conn
 
 def init_db():
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS doctors (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            full_name TEXT NOT NULL,
-            hospital TEXT
-        );
-    ''')
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS patient_records (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            doctor_username TEXT NOT NULL,
-            patient_id TEXT NOT NULL,
-            patient_name TEXT NOT NULL,
-            patient_age INTEGER NOT NULL,
-            diagnosis_date TEXT NOT NULL,
-            result_label TEXT NOT NULL,
-            is_benign INTEGER NOT NULL,
-            confidence REAL NOT NULL,
-            notes TEXT
-        );
-    ''')
-    conn.commit()
-    cursor.close()
-    conn.close()
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS doctors (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                full_name TEXT NOT NULL,
+                hospital TEXT
+            );
+        ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS patient_records (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                doctor_username TEXT NOT NULL,
+                patient_id TEXT NOT NULL,
+                patient_name TEXT NOT NULL,
+                patient_age INTEGER NOT NULL,
+                diagnosis_date TEXT NOT NULL,
+                result_label TEXT NOT NULL,
+                is_benign INTEGER NOT NULL,
+                confidence REAL NOT NULL,
+                notes TEXT
+            );
+        ''')
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        print(f"[DB Init Error]: {e}")
 
 init_db()
+
+# Middleware bắt toàn bộ lỗi server trả về JSON để không bị SyntaxError bên Frontend
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Lỗi hệ thống Server: {str(exc)}"}
+    )
 
 class DoctorRegister(BaseModel):
     username: str
@@ -86,13 +104,13 @@ class DiagnosticRequest(BaseModel):
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "db_exists": os.path.exists(DB_PATH), "model_exists": os.path.exists(MODEL_PATH)}
+    return {"status": "ok", "db_path": DB_PATH, "model_exists": os.path.exists(MODEL_PATH)}
 
 @app.post("/api/register")
 def register_doctor(doc: DoctorRegister):
     clean_username = doc.username.strip().lower()
     if not clean_username:
-        raise HTTPException(status_code=400, detail="Tên tài khoản không được trống!")
+        raise HTTPException(status_code=400, detail="Tên tài khoản không được để trống!")
 
     conn = get_db()
     cursor = conn.cursor()
@@ -104,11 +122,11 @@ def register_doctor(doc: DoctorRegister):
             (clean_username, hashed_pwd, doc.full_name.strip(), doc.hospital.strip() if doc.hospital else "")
         )
         conn.commit()
-        return {"status": "success", "message": "Đăng ký Bác sĩ thành công!", "username": clean_username}
+        return {"status": "success", "message": "Đăng ký thành công!", "username": clean_username}
     except sqlite3.IntegrityError:
-        raise HTTPException(status_code=400, detail="Tên tài khoản Bác sĩ này đã tồn tại!")
+        raise HTTPException(status_code=400, detail="Tài khoản Bác sĩ này đã tồn tại trên hệ thống!")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Lỗi lưu CSDL: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Lỗi thao tác CSDL: {str(e)}")
     finally:
         cursor.close()
         conn.close()
@@ -400,7 +418,14 @@ def index():
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({ username: u, password: p, full_name: fn, hospital: hp })
                     });
-                    const data = await res.json();
+                    
+                    let data = {};
+                    try {
+                        data = await res.json();
+                    } catch(e) {
+                        data = { detail: "Lỗi phản hồi không đúng định dạng từ máy chủ." };
+                    }
+
                     if (res.ok) {
                         alert(`✅ ĐĂNG KÝ THÀNH CÔNG!\n\nTài khoản: ${data.username}\n\nHệ thống chuyển sang màn hình Đăng Nhập.`);
                         toggleAuthMode(true);
@@ -410,7 +435,7 @@ def index():
                         alert("❌ Lỗi: " + (data.detail || "Tài khoản đã tồn tại!"));
                     }
                 } catch(err) {
-                    alert("❌ Lỗi hệ thống: " + err);
+                    alert("❌ Lỗi mạng hoặc kết nối máy chủ không phản hồi!");
                 }
             } else {
                 try {
@@ -419,7 +444,14 @@ def index():
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({ username: u, password: p })
                     });
-                    const data = await res.json();
+                    
+                    let data = {};
+                    try {
+                        data = await res.json();
+                    } catch(e) {
+                        data = { detail: "Mã phản hồi từ máy chủ không hợp lệ." };
+                    }
+
                     if (res.ok) {
                         currentDoctor = data;
                         renderNavbar();

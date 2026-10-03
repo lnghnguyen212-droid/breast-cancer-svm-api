@@ -7,4 +7,3 @@ pytest
 requests
 pydantic
 passlib[bcrypt]
-psycopg2-binary
