@@ -15,7 +15,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 app = FastAPI(
     title="Doctor Portal - Breast Cancer SVM Diagnostic System",
     description="Hệ thống hỗ trợ chẩn đoán dành cho Bác sĩ",
-    version="2.4.0"
+    version="2.5.0"
 )
 
 app.add_middleware(
@@ -26,7 +26,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Đường dẫn DB an toàn trên Render (ưu tiên /tmp nếu chạy trên Linux/Render)
+# Đường dẫn DB an toàn (Linux/Render dùng /tmp, Windows dùng artifacts/)
 if os.name == 'nt':
     DB_PATH = os.path.join(os.path.dirname(__file__), "..", "artifacts", "doctor_portal.db")
 else:
@@ -76,7 +76,7 @@ def init_db():
 
 init_db()
 
-# Middleware bắt toàn bộ lỗi server trả về JSON để không bị SyntaxError bên Frontend
+# Middleware bắt ngoại lệ toàn cục trả về JSON chuẩn
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
@@ -114,7 +114,10 @@ def register_doctor(doc: DoctorRegister):
 
     conn = get_db()
     cursor = conn.cursor()
-    hashed_pwd = pwd_context.hash(doc.password)
+    
+    # Cắt ngắn mật khẩu tối đa 72 ký tự để tương thích tuyệt đối với Bcrypt
+    safe_password = doc.password[:72]
+    hashed_pwd = pwd_context.hash(safe_password)
     
     try:
         cursor.execute(
@@ -141,7 +144,9 @@ def login_doctor(doc: DoctorLogin):
     cursor.close()
     conn.close()
     
-    if not row or not pwd_context.verify(doc.password, row[0]):
+    # Cắt ngắn mật khẩu đối chiếu tương tự khi kiểm tra đăng nhập
+    safe_password = doc.password[:72]
+    if not row or not pwd_context.verify(safe_password, row[0]):
         raise HTTPException(status_code=401, detail="Tên đăng nhập hoặc mật khẩu không chính xác!")
         
     return {
@@ -420,11 +425,7 @@ def index():
                     });
                     
                     let data = {};
-                    try {
-                        data = await res.json();
-                    } catch(e) {
-                        data = { detail: "Lỗi phản hồi không đúng định dạng từ máy chủ." };
-                    }
+                    try { data = await res.json(); } catch(e) { data = { detail: "Lỗi định dạng phản hồi từ server." }; }
 
                     if (res.ok) {
                         alert(`✅ ĐĂNG KÝ THÀNH CÔNG!\n\nTài khoản: ${data.username}\n\nHệ thống chuyển sang màn hình Đăng Nhập.`);
@@ -446,11 +447,7 @@ def index():
                     });
                     
                     let data = {};
-                    try {
-                        data = await res.json();
-                    } catch(e) {
-                        data = { detail: "Mã phản hồi từ máy chủ không hợp lệ." };
-                    }
+                    try { data = await res.json(); } catch(e) { data = { detail: "Mã phản hồi không hợp lệ." }; }
 
                     if (res.ok) {
                         currentDoctor = data;
