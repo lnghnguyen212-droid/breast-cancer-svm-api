@@ -13,7 +13,7 @@ from pydantic import BaseModel
 app = FastAPI(
     title="Doctor Portal - Breast Cancer SVM Diagnostic System",
     description="Hệ thống hỗ trợ chẩn đoán dành cho Bác sĩ",
-    version="3.0.0"
+    version="3.1.0"
 )
 
 app.add_middleware(
@@ -24,7 +24,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Đường dẫn DB SQLite chuẩn
+# Đường dẫn Database SQLite chuẩn
 if os.name == 'nt':
     DB_PATH = os.path.join(os.path.dirname(__file__), "..", "artifacts", "doctor_portal.db")
 else:
@@ -347,14 +347,14 @@ def index():
                     </div>
                     <h3 style="margin-bottom: 12px; font-size: 1.05rem; margin-top: 15px;">2. Chỉ số sinh học (SVM Features)</h3>
                     <div class="form-grid">
-                        <div class="form-group"><label>Mean Radius</label><input type="number" step="any" id="f0" value="14.12" required></div>
-                        <div class="form-group"><label>Mean Texture</label><input type="number" step="any" id="f1" value="19.28" required></div>
-                        <div class="form-group"><label>Mean Perimeter</label><input type="number" step="any" id="f2" value="91.96" required></div>
-                        <div class="form-group"><label>Mean Area</label><input type="number" step="any" id="f3" value="654.88" required></div>
-                        <div class="form-group"><label>Mean Smoothness</label><input type="number" step="any" id="f4" value="0.096" required></div>
-                        <div class="form-group"><label>Worst Radius</label><input type="number" step="any" id="f20" value="16.26" required></div>
-                        <div class="form-group"><label>Worst Area</label><input type="number" step="any" id="f23" value="880.58" required></div>
-                        <div class="form-group"><label>Worst Smoothness</label><input type="number" step="any" id="f24" value="0.132" required></div>
+                        <div class="form-group"><label>Bán kính trung bình (Mean Radius)</label><input type="number" step="any" id="f0" value="14.12" required></div>
+                        <div class="form-group"><label>Độ thô trung bình (Mean Texture)</label><input type="number" step="any" id="f1" value="19.28" required></div>
+                        <div class="form-group"><label>Chu vi trung bình (Mean Perimeter)</label><input type="number" step="any" id="f2" value="91.96" required></div>
+                        <div class="form-group"><label>Diện tích trung bình (Mean Area)</label><input type="number" step="any" id="f3" value="654.88" required></div>
+                        <div class="form-group"><label>Độ nhẵn trung bình (Mean Smoothness)</label><input type="number" step="any" id="f4" value="0.096" required></div>
+                        <div class="form-group"><label>Bán kính lớn nhất (Worst Radius)</label><input type="number" step="any" id="f20" value="16.26" required></div>
+                        <div class="form-group"><label>Diện tích lớn nhất (Worst Area)</label><input type="number" step="any" id="f23" value="880.58" required></div>
+                        <div class="form-group"><label>Độ nhẵn lớn nhất (Worst Smoothness)</label><input type="number" step="any" id="f24" value="0.132" required></div>
                     </div>
                     <div class="form-group" style="margin-bottom: 20px;">
                         <label>Ghi chú lâm sàng của Bác sĩ</label>
