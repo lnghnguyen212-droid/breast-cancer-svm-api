@@ -1,10 +1,10 @@
 fastapi
-uvicorn[standard]
-numpy
+uvicorn
 scikit-learn
 joblib
-pydantic
-pytest
-httpx
 pandas
-streamlit
+pytest
+requests
+pydantic
+passlib[bcrypt]
+pyodbc
