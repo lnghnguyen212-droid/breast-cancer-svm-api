@@ -26,13 +26,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Lấy URL kết nối PostgreSQL từ biến môi trường
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/breast_cancer_db")
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "artifacts", "breast_cancer_svm.joblib")
 
 def get_db_connection():
     try:
-        # Xử lý trường hợp URL bắt đầu bằng postgres://
         db_url = DATABASE_URL
         if db_url.startswith("postgres://"):
             db_url = db_url.replace("postgres://", "postgresql://", 1)
@@ -107,18 +105,23 @@ def register_doctor(doc: DoctorRegister):
     conn = get_db_connection()
     if not conn:
         raise HTTPException(status_code=500, detail="Lỗi kết nối Cơ sở dữ liệu!")
+    
+    clean_username = doc.username.strip().lower()
+    if not clean_username:
+        raise HTTPException(status_code=400, detail="Tên tài khoản không được để trống!")
+
     cursor = conn.cursor()
     hashed_pwd = pwd_context.hash(doc.password)
     try:
         cursor.execute(
             "INSERT INTO doctors (username, password_hash, full_name, hospital) VALUES (%s, %s, %s, %s)",
-            (doc.username, hashed_pwd, doc.full_name, doc.hospital)
+            (clean_username, hashed_pwd, doc.full_name.strip(), doc.hospital.strip() if doc.hospital else "")
         )
         conn.commit()
-        return {"status": "success", "message": "Đăng ký Bác sĩ thành công!"}
+        return {"status": "success", "message": "Đăng ký Bác sĩ thành công!", "username": clean_username}
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=400, detail="Tên tài khoản Bác sĩ đã tồn tại hoặc có lỗi xảy ra!")
+        raise HTTPException(status_code=400, detail="Tên tài khoản Bác sĩ đã tồn tại hoặc không hợp lệ!")
     finally:
         cursor.close()
         conn.close()
@@ -128,8 +131,10 @@ def login_doctor(doc: DoctorLogin):
     conn = get_db_connection()
     if not conn:
         raise HTTPException(status_code=500, detail="Lỗi kết nối Cơ sở dữ liệu!")
+    
+    clean_username = doc.username.strip().lower()
     cursor = conn.cursor()
-    cursor.execute("SELECT password_hash, full_name, hospital FROM doctors WHERE username = %s", (doc.username,))
+    cursor.execute("SELECT password_hash, full_name, hospital FROM doctors WHERE username = %s", (clean_username,))
     row = cursor.fetchone()
     cursor.close()
     conn.close()
@@ -139,7 +144,7 @@ def login_doctor(doc: DoctorLogin):
         
     return {
         "status": "success",
-        "username": doc.username,
+        "username": clean_username,
         "full_name": row[1],
         "hospital": row[2]
     }
@@ -201,7 +206,7 @@ def get_doctor_records(doctor_username: str):
     cursor.execute('''
         SELECT id, patient_id, patient_name, patient_age, diagnosis_date, result_label, is_benign, confidence, notes
         FROM patient_records WHERE doctor_username = %s ORDER BY id DESC
-    ''', (doctor_username,))
+    ''', (doctor_username.strip().lower(),))
     rows = cursor.fetchall()
     cursor.close()
     conn.close()
@@ -390,8 +395,12 @@ def index():
             16.26, 25.67, 107.2, 880.58, 0.132, 0.254, 0.272, 0.114, 0.290, 0.083
         ];
 
-        function toggleAuthMode() {
-            isRegisterMode = !isRegisterMode;
+        function toggleAuthMode(forceLogin = false) {
+            if (forceLogin) {
+                isRegisterMode = false;
+            } else {
+                isRegisterMode = !isRegisterMode;
+            }
             document.getElementById('auth-title').innerText = isRegisterMode ? "Đăng Ký Tài Khoản Bác Sĩ" : "Đăng Nhập Bác Sĩ";
             document.getElementById('register-fields').style.display = isRegisterMode ? "block" : "none";
             document.getElementById('auth-submit-btn').innerText = isRegisterMode ? "Đăng Ký Tài Khoản" : "Đăng Nhập ➔";
@@ -413,7 +422,14 @@ def index():
                     body: JSON.stringify({ username: u, password: p, full_name: fn, hospital: hp })
                 });
                 const data = await res.json();
-                if (res.ok) { alert("Đăng ký thành công! Hãy đăng nhập."); toggleAuthMode(); } else { alert(data.detail); }
+                if (res.ok) {
+                    alert(`✅ ĐĂNG KÝ THÀNH CÔNG!\n\nTài khoản Bác sĩ: ${data.username}\n\nHệ thống sẽ chuyển sang giao diện đăng nhập.`);
+                    toggleAuthMode(true);
+                    document.getElementById('auth-username').value = data.username;
+                    document.getElementById('auth-password').value = p;
+                } else {
+                    alert("❌ Lỗi đăng ký: " + (data.detail || "Không thể tạo tài khoản!"));
+                }
             } else {
                 const res = await fetch('/api/login', {
                     method: 'POST',
@@ -421,7 +437,13 @@ def index():
                     body: JSON.stringify({ username: u, password: p })
                 });
                 const data = await res.json();
-                if (res.ok) { currentDoctor = data; renderNavbar(); showPage('diagnose-page'); } else { alert(data.detail); }
+                if (res.ok) {
+                    currentDoctor = data;
+                    renderNavbar();
+                    showPage('diagnose-page');
+                } else {
+                    alert("❌ Lỗi đăng nhập: " + (data.detail || "Tài khoản hoặc mật khẩu không đúng!"));
+                }
             }
         }
 
