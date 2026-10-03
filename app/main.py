@@ -1,6 +1,7 @@
 import os
-import joblib
+import sqlite3
 import psycopg2
+import joblib
 import numpy as np
 from datetime import datetime
 from typing import List, Optional
@@ -15,7 +16,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 app = FastAPI(
     title="Doctor Portal - Breast Cancer SVM Diagnostic System",
     description="Hệ thống hỗ trợ chẩn đoán dành cho Bác sĩ",
-    version="2.0.0"
+    version="2.1.0"
 )
 
 app.add_middleware(
@@ -26,48 +27,78 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/breast_cancer_db")
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
+SQLITE_DB_PATH = os.path.join(os.path.dirname(__file__), "..", "artifacts", "doctor_portal_local.db")
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "artifacts", "breast_cancer_svm.joblib")
 
 def get_db_connection():
-    try:
-        db_url = DATABASE_URL
-        if db_url.startswith("postgres://"):
-            db_url = db_url.replace("postgres://", "postgresql://", 1)
-        conn = psycopg2.connect(db_url)
-        return conn
-    except Exception as e:
-        print(f"Lỗi kết nối CSDL PostgreSQL: {e}")
-        return None
+    # 1. Thử kết nối PostgreSQL nếu có DATABASE_URL
+    if DATABASE_URL:
+        try:
+            url = DATABASE_URL
+            if url.startswith("postgres://"):
+                url = url.replace("postgres://", "postgresql://", 1)
+            conn = psycopg2.connect(url, sslmode='require', connect_timeout=5)
+            return conn, "postgres"
+        except Exception as e:
+            print(f"[PostgreSQL Connection Failed, Fallback to SQLite]: {e}")
+            
+    # 2. Phương án dự phòng tự động: Dùng SQLite để luôn hoạt động 100%
+    os.makedirs(os.path.dirname(SQLITE_DB_PATH), exist_ok=True)
+    conn = sqlite3.connect(SQLITE_DB_PATH)
+    return conn, "sqlite"
 
 def init_db():
-    conn = get_db_connection()
-    if conn is None:
-        return
+    conn, db_type = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS doctors (
-            id SERIAL PRIMARY KEY,
-            username VARCHAR(100) UNIQUE NOT NULL,
-            password_hash VARCHAR(255) NOT NULL,
-            full_name VARCHAR(255) NOT NULL,
-            hospital VARCHAR(255)
-        );
-    ''')
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS patient_records (
-            id SERIAL PRIMARY KEY,
-            doctor_username VARCHAR(100) NOT NULL,
-            patient_id VARCHAR(50) NOT NULL,
-            patient_name VARCHAR(255) NOT NULL,
-            patient_age INTEGER NOT NULL,
-            diagnosis_date VARCHAR(50) NOT NULL,
-            result_label VARCHAR(50) NOT NULL,
-            is_benign INTEGER NOT NULL,
-            confidence REAL NOT NULL,
-            notes TEXT
-        );
-    ''')
+    if db_type == "postgres":
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS doctors (
+                id SERIAL PRIMARY KEY,
+                username VARCHAR(100) UNIQUE NOT NULL,
+                password_hash VARCHAR(255) NOT NULL,
+                full_name VARCHAR(255) NOT NULL,
+                hospital VARCHAR(255)
+            );
+        ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS patient_records (
+                id SERIAL PRIMARY KEY,
+                doctor_username VARCHAR(100) NOT NULL,
+                patient_id VARCHAR(50) NOT NULL,
+                patient_name VARCHAR(255) NOT NULL,
+                patient_age INTEGER NOT NULL,
+                diagnosis_date VARCHAR(50) NOT NULL,
+                result_label VARCHAR(50) NOT NULL,
+                is_benign INTEGER NOT NULL,
+                confidence REAL NOT NULL,
+                notes TEXT
+            );
+        ''')
+    else:
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS doctors (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                full_name TEXT NOT NULL,
+                hospital TEXT
+            );
+        ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS patient_records (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                doctor_username TEXT NOT NULL,
+                patient_id TEXT NOT NULL,
+                patient_name TEXT NOT NULL,
+                patient_age INTEGER NOT NULL,
+                diagnosis_date TEXT NOT NULL,
+                result_label TEXT NOT NULL,
+                is_benign INTEGER NOT NULL,
+                confidence REAL NOT NULL,
+                notes TEXT
+            );
+        ''')
     conn.commit()
     cursor.close()
     conn.close()
@@ -94,47 +125,42 @@ class DiagnosticRequest(BaseModel):
 
 @app.get("/health")
 def health_check():
-    conn = get_db_connection()
-    db_ok = conn is not None
-    if conn:
-        conn.close()
-    return {"status": "ok", "db_connected": db_ok, "model_exists": os.path.exists(MODEL_PATH)}
+    conn, db_type = get_db_connection()
+    conn.close()
+    return {"status": "ok", "db_engine": db_type, "model_exists": os.path.exists(MODEL_PATH)}
 
 @app.post("/api/register")
 def register_doctor(doc: DoctorRegister):
-    conn = get_db_connection()
-    if not conn:
-        raise HTTPException(status_code=500, detail="Lỗi kết nối Cơ sở dữ liệu!")
-    
     clean_username = doc.username.strip().lower()
     if not clean_username:
         raise HTTPException(status_code=400, detail="Tên tài khoản không được để trống!")
 
+    conn, db_type = get_db_connection()
     cursor = conn.cursor()
     hashed_pwd = pwd_context.hash(doc.password)
+    
     try:
-        cursor.execute(
-            "INSERT INTO doctors (username, password_hash, full_name, hospital) VALUES (%s, %s, %s, %s)",
-            (clean_username, hashed_pwd, doc.full_name.strip(), doc.hospital.strip() if doc.hospital else "")
-        )
+        placeholder = "%s" if db_type == "postgres" else "?"
+        query = f"INSERT INTO doctors (username, password_hash, full_name, hospital) VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder})"
+        cursor.execute(query, (clean_username, hashed_pwd, doc.full_name.strip(), doc.hospital.strip() if doc.hospital else ""))
         conn.commit()
-        return {"status": "success", "message": "Đăng ký Bác sĩ thành công!", "username": clean_username}
+        return {"status": "success", "message": "Đăng ký thành công!", "username": clean_username}
     except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=400, detail="Tên tài khoản Bác sĩ đã tồn tại hoặc không hợp lệ!")
+        conn.rollback() if hasattr(conn, 'rollback') else None
+        raise HTTPException(status_code=400, detail="Tài khoản Bác sĩ này đã tồn tại trên hệ thống!")
     finally:
         cursor.close()
         conn.close()
 
 @app.post("/api/login")
 def login_doctor(doc: DoctorLogin):
-    conn = get_db_connection()
-    if not conn:
-        raise HTTPException(status_code=500, detail="Lỗi kết nối Cơ sở dữ liệu!")
-    
     clean_username = doc.username.strip().lower()
+    conn, db_type = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT password_hash, full_name, hospital FROM doctors WHERE username = %s", (clean_username,))
+    
+    placeholder = "%s" if db_type == "postgres" else "?"
+    query = f"SELECT password_hash, full_name, hospital FROM doctors WHERE username = {placeholder}"
+    cursor.execute(query, (clean_username,))
     row = cursor.fetchone()
     cursor.close()
     conn.close()
@@ -174,15 +200,15 @@ def diagnose_and_save(data: DiagnosticRequest):
         result_label = "Lành tính" if is_benign else "Ác tính"
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        conn = get_db_connection()
-        if not conn:
-            raise HTTPException(status_code=500, detail="Lỗi kết nối Cơ sở dữ liệu!")
+        conn, db_type = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute('''
+        placeholder = "%s" if db_type == "postgres" else "?"
+        query = f'''
             INSERT INTO patient_records 
             (doctor_username, patient_id, patient_name, patient_age, diagnosis_date, result_label, is_benign, confidence, notes)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-        ''', (data.doctor_username, data.patient_id, data.patient_name, data.patient_age, now_str, result_label, 1 if is_benign else 0, confidence, data.notes))
+            VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder})
+        '''
+        cursor.execute(query, (data.doctor_username, data.patient_id, data.patient_name, data.patient_age, now_str, result_label, 1 if is_benign else 0, confidence, data.notes))
         conn.commit()
         cursor.close()
         conn.close()
@@ -199,14 +225,14 @@ def diagnose_and_save(data: DiagnosticRequest):
 
 @app.get("/api/records/{doctor_username}")
 def get_doctor_records(doctor_username: str):
-    conn = get_db_connection()
-    if not conn:
-        return []
+    conn, db_type = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute('''
+    placeholder = "%s" if db_type == "postgres" else "?"
+    query = f'''
         SELECT id, patient_id, patient_name, patient_age, diagnosis_date, result_label, is_benign, confidence, notes
-        FROM patient_records WHERE doctor_username = %s ORDER BY id DESC
-    ''', (doctor_username.strip().lower(),))
+        FROM patient_records WHERE doctor_username = {placeholder} ORDER BY id DESC
+    '''
+    cursor.execute(query, (doctor_username.strip().lower(),))
     rows = cursor.fetchall()
     cursor.close()
     conn.close()
@@ -222,11 +248,11 @@ def get_doctor_records(doctor_username: str):
 
 @app.delete("/api/records/{record_id}")
 def delete_record(record_id: int):
-    conn = get_db_connection()
-    if not conn:
-        raise HTTPException(status_code=500, detail="Lỗi kết nối CSDL!")
+    conn, db_type = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM patient_records WHERE id = %s", (record_id,))
+    placeholder = "%s" if db_type == "postgres" else "?"
+    query = f"DELETE FROM patient_records WHERE id = {placeholder}"
+    cursor.execute(query, (record_id,))
     conn.commit()
     cursor.close()
     conn.close()
@@ -414,35 +440,43 @@ def index():
             const p = document.getElementById('auth-password').value;
 
             if (isRegisterMode) {
-                const fn = document.getElementById('auth-fullname').value;
-                const hp = document.getElementById('auth-hospital').value;
-                const res = await fetch('/api/register', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ username: u, password: p, full_name: fn, hospital: hp })
-                });
-                const data = await res.json();
-                if (res.ok) {
-                    alert(`✅ ĐĂNG KÝ THÀNH CÔNG!\n\nTài khoản Bác sĩ: ${data.username}\n\nHệ thống sẽ chuyển sang giao diện đăng nhập.`);
-                    toggleAuthMode(true);
-                    document.getElementById('auth-username').value = data.username;
-                    document.getElementById('auth-password').value = p;
-                } else {
-                    alert("❌ Lỗi đăng ký: " + (data.detail || "Không thể tạo tài khoản!"));
+                const fn = document.getElementById('auth-fullname').value || "Bác sĩ";
+                const hp = document.getElementById('auth-hospital').value || "Bệnh viện";
+                try {
+                    const res = await fetch('/api/register', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ username: u, password: p, full_name: fn, hospital: hp })
+                    });
+                    const data = await res.json();
+                    if (res.ok) {
+                        alert(`✅ ĐĂNG KÝ THÀNH CÔNG!\n\nTài khoản: ${data.username}\n\nHệ thống sẽ chuyển sang giao diện đăng nhập.`);
+                        toggleAuthMode(true);
+                        document.getElementById('auth-username').value = data.username;
+                        document.getElementById('auth-password').value = p;
+                    } else {
+                        alert("❌ Lỗi đăng ký: " + (data.detail || "Tài khoản đã tồn tại!"));
+                    }
+                } catch(err) {
+                    alert("❌ Lỗi kết nối mạng, vui lòng thử lại!");
                 }
             } else {
-                const res = await fetch('/api/login', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ username: u, password: p })
-                });
-                const data = await res.json();
-                if (res.ok) {
-                    currentDoctor = data;
-                    renderNavbar();
-                    showPage('diagnose-page');
-                } else {
-                    alert("❌ Lỗi đăng nhập: " + (data.detail || "Tài khoản hoặc mật khẩu không đúng!"));
+                try {
+                    const res = await fetch('/api/login', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ username: u, password: p })
+                    });
+                    const data = await res.json();
+                    if (res.ok) {
+                        currentDoctor = data;
+                        renderNavbar();
+                        showPage('diagnose-page');
+                    } else {
+                        alert("❌ Lỗi đăng nhập: " + (data.detail || "Mật khẩu không đúng!"));
+                    }
+                } catch(err) {
+                    alert("❌ Lỗi kết nối máy chủ!");
                 }
             }
         }
