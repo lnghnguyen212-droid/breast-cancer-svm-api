@@ -1,6 +1,7 @@
 import os
 import sqlite3
 import joblib
+import bcrypt
 import numpy as np
 from datetime import datetime
 from typing import List, Optional
@@ -8,14 +9,11 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from passlib.context import CryptContext
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 app = FastAPI(
     title="Doctor Portal - Breast Cancer SVM Diagnostic System",
     description="Hệ thống hỗ trợ chẩn đoán dành cho Bác sĩ",
-    version="2.6.0"
+    version="3.0.0"
 )
 
 app.add_middleware(
@@ -26,7 +24,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Đường dẫn Database SQLite an toàn
+# Đường dẫn DB SQLite chuẩn
 if os.name == 'nt':
     DB_PATH = os.path.join(os.path.dirname(__file__), "..", "artifacts", "doctor_portal.db")
 else:
@@ -34,10 +32,20 @@ else:
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "artifacts", "breast_cancer_svm.joblib")
 
-def truncate_password(password: str) -> str:
-    """Cắt ngắn mật khẩu an toàn theo byte để tương thích tuyệt đối với bcrypt (giới hạn 72 bytes)"""
+def hash_password(password: str) -> str:
+    """Mã hóa mật khẩu bằng bcrypt trực tiếp"""
     pwd_bytes = password.encode('utf-8')[:72]
-    return pwd_bytes.decode('utf-8', errors='ignore')
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(pwd_bytes, salt).decode('utf-8')
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Kiểm tra mật khẩu trực tiếp bằng bcrypt"""
+    try:
+        pwd_bytes = plain_password.encode('utf-8')[:72]
+        hash_bytes = hashed_password.encode('utf-8')
+        return bcrypt.checkpw(pwd_bytes, hash_bytes)
+    except Exception:
+        return False
 
 def get_db():
     dirname = os.path.dirname(DB_PATH)
@@ -81,7 +89,6 @@ def init_db():
 
 init_db()
 
-# Middleware bắt ngoại lệ toàn cục trả về JSON
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
@@ -120,9 +127,7 @@ def register_doctor(doc: DoctorRegister):
     conn = get_db()
     cursor = conn.cursor()
     
-    # Cắt ngắn an toàn để tránh lỗi 72 bytes của bcrypt
-    safe_pwd = truncate_password(doc.password)
-    hashed_pwd = pwd_context.hash(safe_pwd)
+    hashed_pwd = hash_password(doc.password)
     
     try:
         cursor.execute(
@@ -149,8 +154,7 @@ def login_doctor(doc: DoctorLogin):
     cursor.close()
     conn.close()
     
-    safe_pwd = truncate_password(doc.password)
-    if not row or not pwd_context.verify(safe_pwd, row[0]):
+    if not row or not verify_password(doc.password, row[0]):
         raise HTTPException(status_code=401, detail="Tên đăng nhập hoặc mật khẩu không chính xác!")
         
     return {
@@ -309,7 +313,7 @@ def index():
                     </div>
                     <div class="form-group" style="margin-bottom: 15px;">
                         <label>Mật khẩu</label>
-                        <input type="password" id="auth-password" maxlength="50" required>
+                        <input type="password" id="auth-password" required>
                     </div>
                     <div id="register-fields" style="display: none;">
                         <div class="form-group" style="margin-bottom: 15px;">
@@ -416,10 +420,7 @@ def index():
         async function handleAuth(event) {
             event.preventDefault();
             const u = document.getElementById('auth-username').value;
-            let p = document.getElementById('auth-password').value;
-
-            // Cắt ngắn client-side dưới 50 ký tự
-            if (p.length > 50) p = p.substring(0, 50);
+            const p = document.getElementById('auth-password').value;
 
             if (isRegisterMode) {
                 const fn = document.getElementById('auth-fullname').value || "Bác sĩ";
@@ -431,8 +432,7 @@ def index():
                         body: JSON.stringify({ username: u, password: p, full_name: fn, hospital: hp })
                     });
                     
-                    let data = {};
-                    try { data = await res.json(); } catch(e) { data = { detail: "Lỗi định dạng phản hồi từ server." }; }
+                    let data = await res.json();
 
                     if (res.ok) {
                         alert(`✅ ĐĂNG KÝ THÀNH CÔNG!\n\nTài khoản: ${data.username}\n\nHệ thống chuyển sang màn hình Đăng Nhập.`);
@@ -453,8 +453,7 @@ def index():
                         body: JSON.stringify({ username: u, password: p })
                     });
                     
-                    let data = {};
-                    try { data = await res.json(); } catch(e) { data = { detail: "Mã phản hồi không hợp lệ." }; }
+                    let data = await res.json();
 
                     if (res.ok) {
                         currentDoctor = data;
