@@ -11,12 +11,11 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from sklearn.svm import SVC
 
 app = FastAPI(
     title="Doctor Portal - Breast Cancer SVM Diagnostic System",
     description="Hệ thống hỗ trợ chẩn đoán dành cho Bác sĩ",
-    version="3.1.0"
+    version="3.2.0"
 )
 
 app.add_middleware(
@@ -176,7 +175,6 @@ def diagnose_and_save(data: DiagnosticRequest):
         loaded = joblib.load(MODEL_PATH)
         features_array = np.array(data.features).reshape(1, -1)
 
-        # Xử lý chọn Kernel linh hoạt
         selected_kernel = (data.kernel or "rbf").lower()
         if isinstance(loaded, dict) and selected_kernel in loaded:
             model = loaded[selected_kernel]
@@ -244,7 +242,6 @@ def get_doctor_records(doctor_username: str):
 
 @app.get("/api/records/{doctor_username}/export-csv")
 def export_patient_records_csv(doctor_username: str):
-    """Tính năng tải dữ liệu lịch sử bệnh nhân về máy dạng file CSV"""
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute('''
@@ -287,87 +284,327 @@ def index():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Doctor Portal - Cổng Chẩn Đoán AI Ung Thư Vú</title>
-    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <title>DOCTOR PORTAL — DIOR STYLE MEDICAL AI</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary-pink: #d81b60;
-            --primary-hover: #c2185b;
-            --light-pink: #fce4ec;
-            --bg-light: #fff5f8;
-            --card-border: #f8bbd0;
-            --text-dark: #2c3e50;
-            --text-muted: #6c757d;
+            --dior-black: #111111;
+            --dior-gray: #767676;
+            --dior-light-gray: #f9f9f9;
+            --dior-border: #e5e5e5;
+            --dior-accent-pink: #e8a7b8;
+            --dior-soft-bg: #faf7f8;
             --success-green: #2e7d32;
-            --danger-red: #c62828;
+            --danger-red: #a91b1b;
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Nunito', sans-serif; }
-        body { background-color: var(--bg-light); color: var(--text-dark); display: flex; flex-direction: column; min-height: 100vh; }
-        header { background-color: #ffffff; border-bottom: 2px solid var(--card-border); padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 10px rgba(216, 27, 96, 0.08); position: sticky; top: 0; z-index: 100; }
-        .logo-area { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.2rem; color: var(--primary-pink); }
-        nav { display: flex; gap: 10px; align-items: center; }
-        .nav-link { text-decoration: none; color: var(--text-dark); font-weight: 700; padding: 8px 16px; border-radius: 20px; cursor: pointer; transition: all 0.2s; }
-        .nav-link:hover, .nav-link.active { background-color: var(--light-pink); color: var(--primary-pink); }
-        .doctor-badge { background: var(--light-pink); color: var(--primary-pink); padding: 6px 14px; border-radius: 20px; font-weight: 700; font-size: 0.9rem; margin-right: 10px; }
-        .main-container { flex: 1; max-width: 1000px; width: 100%; margin: 25px auto; padding: 0 20px; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            background-color: #ffffff; 
+            color: var(--dior-black); 
+            font-family: 'Inter', sans-serif; 
+            display: flex; 
+            flex-direction: column; 
+            min-height: 100vh;
+            letter-spacing: 0.02em;
+        }
+
+        /* TOP BANNER DIOR STYLE */
+        .top-notice {
+            background-color: var(--dior-black);
+            color: #ffffff;
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.25em;
+            text-align: center;
+            padding: 8px 15px;
+            font-weight: 500;
+        }
+
+        /* HEADER */
+        header { 
+            background-color: #ffffff; 
+            border-bottom: 1px solid var(--dior-border); 
+            padding: 22px 50px; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            position: sticky; 
+            top: 0; 
+            z-index: 100; 
+        }
+        .logo-area { 
+            font-family: 'Playfair Display', serif; 
+            font-size: 1.4rem; 
+            font-weight: 700; 
+            letter-spacing: 0.15em; 
+            text-transform: uppercase; 
+            color: var(--dior-black); 
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        nav { display: flex; gap: 25px; align-items: center; }
+        .nav-link { 
+            text-decoration: none; 
+            color: var(--dior-black); 
+            font-size: 0.8rem; 
+            text-transform: uppercase; 
+            letter-spacing: 0.15em; 
+            font-weight: 500; 
+            padding: 6px 0; 
+            cursor: pointer; 
+            transition: all 0.3s; 
+            border-bottom: 2px solid transparent; 
+        }
+        .nav-link:hover, .nav-link.active { 
+            border-bottom-color: var(--dior-black); 
+        }
+        .doctor-badge { 
+            background: var(--dior-soft-bg); 
+            color: var(--dior-black); 
+            padding: 8px 18px; 
+            border-radius: 30px; 
+            font-size: 0.75rem; 
+            text-transform: uppercase; 
+            letter-spacing: 0.1em; 
+            border: 1px solid var(--dior-border); 
+            margin-right: 15px; 
+        }
+
+        /* HERO IMAGE BANNER */
+        .hero-section {
+            position: relative;
+            width: 100%;
+            height: 280px;
+            overflow: hidden;
+            background-color: #000;
+        }
+        .hero-section img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            opacity: 0.75;
+            filter: grayscale(20%);
+        }
+        .hero-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #ffffff;
+            text-align: center;
+            background: linear-gradient(180deg, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.6) 100%);
+        }
+        .hero-title {
+            font-family: 'Playfair Display', serif;
+            font-size: 2.2rem;
+            font-weight: 400;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+        .hero-subtitle {
+            font-size: 0.82rem;
+            letter-spacing: 0.25em;
+            text-transform: uppercase;
+            opacity: 0.85;
+            font-weight: 300;
+        }
+
+        /* MAIN LAYOUT */
+        .main-container { flex: 1; max-width: 1100px; width: 100%; margin: 40px auto; padding: 0 25px; }
         .page { display: none; }
-        .page.active-page { display: block; animation: fadeIn 0.3s ease-in-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        .card { background: #ffffff; border-radius: 16px; padding: 30px; box-shadow: 0 4px 20px rgba(216, 27, 96, 0.06); border: 1px solid var(--card-border); margin-bottom: 20px; }
-        .btn { background-color: var(--primary-pink); color: white; padding: 10px 22px; font-size: 0.95rem; font-weight: 700; border: none; border-radius: 25px; cursor: pointer; transition: 0.2s; text-align: center; }
-        .btn:hover { background-color: var(--primary-hover); }
-        .btn-danger { background-color: var(--danger-red); }
-        .btn-outline { background-color: transparent; color: var(--primary-pink); border: 2px solid var(--primary-pink); }
-        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 20px; }
-        .form-group { display: flex; flex-direction: column; gap: 6px; }
-        .form-group label { font-size: 0.88rem; font-weight: 700; }
-        .form-group input, .form-group select, .form-group textarea { padding: 10px 12px; border: 1px solid var(--card-border); border-radius: 8px; font-size: 0.95rem; outline: none; background-color: #fff; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        th, td { padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--card-border); font-size: 0.92rem; }
-        th { background-color: var(--light-pink); color: var(--primary-pink); font-weight: 800; }
-        .badge-benign { background-color: #e8f5e9; color: var(--success-green); padding: 4px 10px; border-radius: 12px; font-weight: 700; }
-        .badge-malignant { background-color: #ffebee; color: var(--danger-red); padding: 4px 10px; border-radius: 12px; font-weight: 700; }
-        footer { background: #ffffff; border-top: 1px solid var(--card-border); text-align: center; padding: 18px; color: var(--text-muted); font-size: 0.88rem; margin-top: auto; }
+        .page.active-page { display: block; animation: fadeIn 0.4s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* CARDS & PANELS */
+        .card { 
+            background: #ffffff; 
+            border: 1px solid var(--dior-border); 
+            padding: 40px; 
+            margin-bottom: 30px; 
+        }
+        .card-header-dior {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.5rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-bottom: 25px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--dior-border);
+            color: var(--dior-black);
+        }
+
+        /* SIDE BY SIDE WITH IMAGE */
+        .grid-split {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+        .grid-split img {
+            width: 100%;
+            height: 100%;
+            max-height: 280px;
+            object-fit: cover;
+            border: 1px solid var(--dior-border);
+        }
+
+        /* BUTTONS DIOR STYLE */
+        .btn { 
+            background-color: var(--dior-black); 
+            color: #ffffff; 
+            padding: 14px 32px; 
+            font-size: 0.78rem; 
+            font-weight: 600; 
+            text-transform: uppercase; 
+            letter-spacing: 0.2em; 
+            border: 1px solid var(--dior-black); 
+            cursor: pointer; 
+            transition: all 0.3s ease; 
+            text-align: center; 
+            display: inline-block;
+        }
+        .btn:hover { 
+            background-color: #ffffff; 
+            color: var(--dior-black); 
+        }
+        .btn-danger { 
+            background-color: var(--danger-red); 
+            border-color: var(--danger-red); 
+            color: #fff; 
+        }
+        .btn-danger:hover {
+            background-color: #fff;
+            color: var(--danger-red);
+        }
+        .btn-outline { 
+            background-color: transparent; 
+            color: var(--dior-black); 
+            border: 1px solid var(--dior-black); 
+        }
+
+        /* FORMS DIOR STYLE */
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 25px; }
+        .form-group { display: flex; flex-direction: column; gap: 8px; }
+        .form-group label { 
+            font-size: 0.75rem; 
+            text-transform: uppercase; 
+            letter-spacing: 0.12em; 
+            color: var(--dior-gray); 
+            font-weight: 600; 
+        }
+        .form-group input, .form-group select, .form-group textarea { 
+            padding: 12px 14px; 
+            border: 1px solid var(--dior-border); 
+            font-size: 0.88rem; 
+            outline: none; 
+            background-color: var(--dior-light-gray); 
+            font-family: 'Inter', sans-serif;
+            transition: border 0.2s;
+        }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+            border-color: var(--dior-black);
+            background-color: #ffffff;
+        }
+
+        /* TABLES DIOR STYLE */
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 16px 18px; text-align: left; border-bottom: 1px solid var(--dior-border); font-size: 0.85rem; }
+        th { 
+            background-color: var(--dior-light-gray); 
+            color: var(--dior-black); 
+            font-weight: 600; 
+            text-transform: uppercase; 
+            letter-spacing: 0.1em; 
+            font-size: 0.75rem; 
+        }
+        .badge-benign { 
+            background-color: #f0fdf4; 
+            color: var(--success-green); 
+            padding: 5px 12px; 
+            border: 1px solid #bbf7d0; 
+            font-size: 0.75rem; 
+            text-transform: uppercase; 
+            letter-spacing: 0.08em; 
+        }
+        .badge-malignant { 
+            background-color: #fef2f2; 
+            color: var(--danger-red); 
+            padding: 5px 12px; 
+            border: 1px solid #fecaca; 
+            font-size: 0.75rem; 
+            text-transform: uppercase; 
+            letter-spacing: 0.08em; 
+        }
+
+        /* FOOTER DIOR STYLE */
+        footer { 
+            background: var(--dior-black); 
+            color: #888888; 
+            text-align: center; 
+            padding: 35px 20px; 
+            font-size: 0.72rem; 
+            text-transform: uppercase; 
+            letter-spacing: 0.25em; 
+            margin-top: auto; 
+            border-top: 1px solid #222;
+        }
     </style>
 </head>
 <body>
+
+    <div class="top-notice">
+        Clinical AI Precision • Breast Cancer SVM Diagnostic System
+    </div>
+
     <header>
         <div class="logo-area">
-            <span>🩺</span>
-            <span>Hệ Thống Chẩn Đoán AI - Doctor Portal</span>
+            <span>DIOR CLINIC AI</span>
         </div>
         <nav id="nav-menu"></nav>
     </header>
 
+    <div class="hero-section">
+        <img src="https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?q=80&w=1600&auto=format&fit=crop" alt="Medical AI Banner">
+        <div class="hero-overlay">
+            <h1 class="hero-title">Precision Diagnostics</h1>
+            <p class="hero-subtitle">Support Vector Machine • Oncology Intelligence</p>
+        </div>
+    </div>
+
     <div class="main-container">
         <!-- 1. ĐĂNG NHẬP / ĐĂNG KÝ -->
         <div id="auth-page" class="page active-page">
-            <div class="card" style="max-width: 450px; margin: 40px auto;">
-                <h2 style="text-align: center; color: var(--primary-pink); margin-bottom: 20px;" id="auth-title">Đăng Nhập Bác Sĩ</h2>
+            <div class="card" style="max-width: 480px; margin: 30px auto;">
+                <h2 class="card-header-dior" id="auth-title" style="text-align: center;">Đăng Nhập Bác Sĩ</h2>
                 <form id="auth-form" onsubmit="handleAuth(event)">
-                    <div class="form-group" style="margin-bottom: 15px;">
+                    <div class="form-group" style="margin-bottom: 20px;">
                         <label>Tài khoản Bác sĩ</label>
                         <input type="text" id="auth-username" required placeholder="dr_nguyen">
                     </div>
-                    <div class="form-group" style="margin-bottom: 15px;">
+                    <div class="form-group" style="margin-bottom: 20px;">
                         <label>Mật khẩu</label>
                         <input type="password" id="auth-password" required>
                     </div>
                     <div id="register-fields" style="display: none;">
-                        <div class="form-group" style="margin-bottom: 15px;">
+                        <div class="form-group" style="margin-bottom: 20px;">
                             <label>Họ và Tên Bác sĩ</label>
                             <input type="text" id="auth-fullname" placeholder="BS. Nguyễn Văn A">
                         </div>
-                        <div class="form-group" style="margin-bottom: 15px;">
+                        <div class="form-group" style="margin-bottom: 20px;">
                             <label>Bệnh viện / Phòng khám</label>
                             <input type="text" id="auth-hospital" placeholder="Bệnh viện Đà Nẵng">
                         </div>
                     </div>
                     <button type="submit" class="btn" style="width: 100%; margin-top: 10px;" id="auth-submit-btn">Đăng Nhập ➔</button>
                 </form>
-                <div style="text-align: center; margin-top: 20px; font-size: 0.9rem;">
+                <div style="text-align: center; margin-top: 25px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.1em;">
                     <span id="auth-toggle-text">Chưa có tài khoản Bác sĩ?</span>
-                    <a href="#" onclick="toggleAuthMode()" style="color: var(--primary-pink); font-weight: 700; text-decoration: none;" id="auth-toggle-link"> Đăng ký ngay</a>
+                    <a href="#" onclick="toggleAuthMode()" style="color: var(--dior-black); font-weight: 700; text-decoration: underline;" id="auth-toggle-link"> Đăng ký ngay</a>
                 </div>
             </div>
         </div>
@@ -375,15 +612,26 @@ def index():
         <!-- 2. PHÂN TÍCH CHẨN ĐOÁN -->
         <div id="diagnose-page" class="page">
             <div class="card">
-                <h2 style="color: var(--primary-pink); margin-bottom: 20px;">📋 Nhập Hồ Sơ Bệnh Nhân & Chỉ Số Giải Phẫu</h2>
+                <h2 class="card-header-dior">Hồ Sơ Bệnh Nhân & Chỉ Số Sinh Học</h2>
+                
+                <div class="grid-split">
+                    <div>
+                        <p style="font-size: 0.88rem; color: var(--dior-gray); line-height: 1.6; margin-bottom: 15px;">
+                            Hệ thống AI hỗ trợ phân tích ma trận tế bào 30 chiều dựa trên thuật toán Support Vector Machine. Vui lòng kiểm tra kỹ các thông số trước khi thực hiện phân tích.
+                        </p>
+                    </div>
+                    <img src="https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?q=80&w=800&auto=format&fit=crop" alt="Cell Analysis">
+                </div>
+
                 <form onsubmit="submitDiagnosis(event)">
-                    <h3 style="margin-bottom: 12px; font-size: 1.05rem;">1. Thông tin bệnh nhân</h3>
+                    <h3 style="margin-bottom: 15px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.15em; color: var(--dior-black);">1. Thông tin bệnh nhân</h3>
                     <div class="form-grid">
                         <div class="form-group"><label>Mã Bệnh Nhân</label><input type="text" id="p-id" required placeholder="BN-2026-001"></div>
                         <div class="form-group"><label>Họ và Tên Bệnh Nhân</label><input type="text" id="p-name" required placeholder="Trần Thị B"></div>
                         <div class="form-group"><label>Tuổi</label><input type="number" id="p-age" value="45" required></div>
                     </div>
-                    <h3 style="margin-bottom: 12px; font-size: 1.05rem; margin-top: 15px;">2. Chỉ số sinh học & Thuật toán (SVM Features)</h3>
+
+                    <h3 style="margin-bottom: 15px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.15em; color: var(--dior-black); margin-top: 25px;">2. Chỉ số sinh học & Thuật toán (SVM Features)</h3>
                     <div class="form-grid">
                         <div class="form-group">
                             <label>Chọn Kernel SVM</label>
@@ -403,10 +651,12 @@ def index():
                         <div class="form-group"><label>Diện tích lớn nhất (Worst Area)</label><input type="number" step="any" id="f23" value="880.58" required></div>
                         <div class="form-group"><label>Độ nhẵn lớn nhất (Worst Smoothness)</label><input type="number" step="any" id="f24" value="0.132" required></div>
                     </div>
-                    <div class="form-group" style="margin-bottom: 20px;">
+
+                    <div class="form-group" style="margin-bottom: 25px;">
                         <label>Ghi chú lâm sàng của Bác sĩ</label>
                         <textarea id="p-notes" rows="2" placeholder="Bệnh nhân khám định kỳ..."></textarea>
                     </div>
+
                     <button type="submit" class="btn" style="width: 100%;">Thực Hiện Phân Tích Chẩn Đoán AI 🚀</button>
                 </form>
             </div>
@@ -415,13 +665,14 @@ def index():
         <!-- 3. LỊCH SỬ CHẨN ĐOÁN -->
         <div id="history-page" class="page">
             <div class="card">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                    <h2 style="color: var(--primary-pink);">📂 Quản Lý Lịch Sử Bệnh Nhân</h2>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; padding-bottom: 12px; border-bottom: 1px solid var(--dior-border);">
+                    <h2 class="card-header-dior" style="margin-bottom: 0; border-bottom: none; padding-bottom: 0;">Quản Lý Lịch Sử Bệnh Nhân</h2>
                     <div>
-                        <button class="btn btn-outline" onclick="exportCSV()">📥 Tải dữ liệu (CSV)</button>
+                        <button class="btn btn-outline" onclick="exportCSV()" style="margin-right: 10px;">📥 Tải dữ liệu (CSV)</button>
                         <button class="btn btn-outline" onclick="loadHistory()">🔄 Tải lại dữ liệu</button>
                     </div>
                 </div>
+
                 <div style="overflow-x: auto;">
                     <table>
                         <thead>
@@ -442,7 +693,9 @@ def index():
         </div>
     </div>
 
-    <footer>Doctor Portal - Hệ thống AI Hỗ trợ Chẩn đoán Ung thư Vú</footer>
+    <footer>
+        Dior Clinic AI Platform • High Precision Oncology System
+    </footer>
 
     <script>
         let currentDoctor = null;
@@ -599,7 +852,7 @@ def index():
                             <td>${r.diagnosis_date}</td>
                             <td><span class="${badgeClass}">${r.result_label}</span></td>
                             <td>${r.notes || '-'}</td>
-                            <td><button class="btn btn-danger" style="padding: 4px 10px; font-size:0.8rem;" onclick="deleteRecord(${r.id})">Xóa</button></td>
+                            <td><button class="btn btn-danger" style="padding: 4px 10px; font-size:0.75rem;" onclick="deleteRecord(${r.id})">Xóa</button></td>
                         </tr>
                     `;
                 });
