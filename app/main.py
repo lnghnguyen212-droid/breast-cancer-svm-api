@@ -13,7 +13,7 @@ from pydantic import BaseModel
 app = FastAPI(
     title="Doctor Portal - Breast Cancer SVM Diagnostic System",
     description="Hệ thống hỗ trợ chẩn đoán dành cho Bác sĩ",
-    version="3.1.0"
+    version="3.2.0"
 )
 
 app.add_middleware(
@@ -33,13 +33,11 @@ else:
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "artifacts", "breast_cancer_svm.joblib")
 
 def hash_password(password: str) -> str:
-    """Mã hóa mật khẩu bằng bcrypt trực tiếp"""
     pwd_bytes = password.encode('utf-8')[:72]
     salt = bcrypt.gensalt()
     return bcrypt.hashpw(pwd_bytes, salt).decode('utf-8')
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Kiểm tra mật khẩu trực tiếp bằng bcrypt"""
     try:
         pwd_bytes = plain_password.encode('utf-8')[:72]
         hash_bytes = hashed_password.encode('utf-8')
@@ -126,7 +124,6 @@ def register_doctor(doc: DoctorRegister):
 
     conn = get_db()
     cursor = conn.cursor()
-    
     hashed_pwd = hash_password(doc.password)
     
     try:
@@ -280,6 +277,8 @@ def index():
         .btn:hover { background-color: var(--primary-hover); }
         .btn-danger { background-color: var(--danger-red); }
         .btn-outline { background-color: transparent; color: var(--primary-pink); border: 2px solid var(--primary-pink); }
+        .btn-success { background-color: #2e7d32; color: white; }
+        .btn-success:hover { background-color: #1b5e20; }
         .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 20px; }
         .form-group { display: flex; flex-direction: column; gap: 6px; }
         .form-group label { font-size: 0.88rem; font-weight: 700; }
@@ -368,9 +367,12 @@ def index():
         <!-- 3. LỊCH SỬ CHẨN ĐOÁN -->
         <div id="history-page" class="page">
             <div class="card">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
                     <h2 style="color: var(--primary-pink);">📂 Quản Lý Lịch Sử Bệnh Nhân</h2>
-                    <button class="btn btn-outline" onclick="loadHistory()">🔄 Tải lại dữ liệu</button>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn btn-success" onclick="exportToCSV()">📥 Xuất Excel (CSV)</button>
+                        <button class="btn btn-outline" onclick="loadHistory()">🔄 Tải lại dữ liệu</button>
+                    </div>
                 </div>
                 <div style="overflow-x: auto;">
                     <table>
@@ -398,6 +400,7 @@ def index():
     <script>
         let currentDoctor = null;
         let isRegisterMode = false;
+        let globalRecords = [];
         const default30 = [
             14.12, 19.28, 91.96, 654.88, 0.096, 0.104, 0.088, 0.048, 0.181, 0.062,
             0.405, 1.216, 2.866, 40.33, 0.007, 0.025, 0.031, 0.011, 0.020, 0.003,
@@ -527,6 +530,7 @@ def index():
             if (!currentDoctor) return;
             const res = await fetch(`/api/records/${currentDoctor.username}`);
             const records = await res.json();
+            globalRecords = records;
             const tbody = document.getElementById('history-table-body');
             tbody.innerHTML = '';
             if (records.length === 0) {
@@ -544,10 +548,63 @@ def index():
                     <td><span class="${badgeClass}">${r.result_label}</span></td>
                     <td>${r.confidence}%</td>
                     <td>${r.notes || '-'}</td>
-                    <td><button class="btn btn-danger" style="padding: 4px 10px; font-size: 0.8rem;" onclick="deleteRecord(${r.id})">🗑 Xóa</button></td>
+                    <td style="display: flex; gap: 6px;">
+                        <button class="btn btn-outline" style="padding: 4px 8px; font-size: 0.8rem;" onclick="downloadSingleRecord(${r.id})">📥 Tải File</button>
+                        <button class="btn btn-danger" style="padding: 4px 8px; font-size: 0.8rem;" onclick="deleteRecord(${r.id})">🗑 Xóa</button>
+                    </td>
                 `;
                 tbody.appendChild(row);
             });
+        }
+
+        function downloadSingleRecord(id) {
+            const r = globalRecords.find(item => item.id === id);
+            if (!r) return;
+            const content = `================================================
+HỒ SƠ CHẨN ĐOÁN UNG THƯ VÚ AI - DOCTOR PORTAL
+================================================
+Mã Bệnh Nhân    : ${r.patient_id}
+Họ và Tên       : ${r.patient_name}
+Tuổi            : ${r.patient_age}
+Ngày Chẩn Đoán  : ${r.diagnosis_date}
+Bác Sĩ Thực Hiện: ${currentDoctor ? currentDoctor.full_name : ''}
+Bệnh Viện       : ${currentDoctor ? currentDoctor.hospital : ''}
+
+------------------------------------------------
+KẾT QUẢ CHẨN ĐOÁN
+------------------------------------------------
+Kết Luận AI     : ${r.result_label.toUpperCase()}
+Độ Tin Cậy      : ${r.confidence}%
+Ghi Chú Lâm Sàng: ${r.notes || 'Không có ghi chú'}
+================================================`;
+
+            const blob = new Blob([content], { type: 'text/plain;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.setAttribute("download", `HoSo_${r.patient_id}_${r.patient_name.replace(/\s+/g, '_')}.txt`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function exportToCSV() {
+            if (!globalRecords || globalRecords.length === 0) {
+                alert("Chưa có dữ liệu hồ sơ để xuất!");
+                return;
+            }
+            let csvContent = "\uFEFFMã Bệnh Nhân,Họ Tên Bệnh Nhân,Tuổi,Ngày Khám,Kết Quả AI,Độ Tin Cậy (%),Ghi Chú\n";
+            globalRecords.forEach(r => {
+                const notes = (r.notes || '-').replace(/"/g, '""');
+                csvContent += `"${r.patient_id}","${r.patient_name}",${r.patient_age},"${r.diagnosis_date}","${r.result_label}",${r.confidence},"${notes}"\n`;
+            });
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.setAttribute("download", `DanhSach_HoSo_BenhNhan_${currentDoctor ? currentDoctor.username : 'Doctor'}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
 
         async function deleteRecord(id) {
