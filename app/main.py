@@ -15,7 +15,7 @@ from pydantic import BaseModel
 app = FastAPI(
     title="Doctor Portal - Breast Cancer SVM Diagnostic System",
     description="Hệ thống hỗ trợ chẩn đoán dành cho Bác sĩ",
-    version="3.2.0"
+    version="3.3.0"
 )
 
 app.add_middleware(
@@ -284,37 +284,35 @@ def index():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DOCTOR PORTAL — DIOR STYLE MEDICAL AI</title>
+    <title>DOCTOR PORTAL — BREAST CANCER AI DIAGNOSTICS</title>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
-            --dior-black: #111111;
-            --dior-gray: #767676;
-            --dior-light-gray: #f9f9f9;
-            --dior-border: #e5e5e5;
-            --dior-accent-pink: #e8a7b8;
-            --dior-soft-bg: #faf7f8;
+            --app-black: #1a1a1a;
+            --app-gray: #666666;
+            --app-light-bg: #f8f9fa;
+            --app-border: #e2e8f0;
+            --app-card-bg: #ffffff;
             --success-green: #2e7d32;
-            --danger-red: #a91b1b;
+            --danger-red: #c62828;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
-            background-color: #ffffff; 
-            color: var(--dior-black); 
+            background-color: var(--app-light-bg); 
+            color: var(--app-black); 
             font-family: 'Inter', sans-serif; 
             display: flex; 
             flex-direction: column; 
             min-height: 100vh;
-            letter-spacing: 0.02em;
         }
 
-        /* TOP BANNER DIOR STYLE */
+        /* TOP BANNER */
         .top-notice {
-            background-color: var(--dior-black);
+            background-color: var(--app-black);
             color: #ffffff;
             font-size: 0.72rem;
             text-transform: uppercase;
-            letter-spacing: 0.25em;
+            letter-spacing: 0.2em;
             text-align: center;
             padding: 8px 15px;
             font-weight: 500;
@@ -323,68 +321,70 @@ def index():
         /* HEADER */
         header { 
             background-color: #ffffff; 
-            border-bottom: 1px solid var(--dior-border); 
-            padding: 22px 50px; 
+            border-bottom: 1px solid var(--app-border); 
+            padding: 18px 40px; 
             display: flex; 
             justify-content: space-between; 
             align-items: center; 
             position: sticky; 
             top: 0; 
             z-index: 100; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.03);
         }
         .logo-area { 
             font-family: 'Playfair Display', serif; 
-            font-size: 1.4rem; 
+            font-size: 1.3rem; 
             font-weight: 700; 
-            letter-spacing: 0.15em; 
+            letter-spacing: 0.08em; 
             text-transform: uppercase; 
-            color: var(--dior-black); 
+            color: var(--app-black); 
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
         }
-        nav { display: flex; gap: 25px; align-items: center; }
+        nav { display: flex; gap: 20px; align-items: center; }
         .nav-link { 
             text-decoration: none; 
-            color: var(--dior-black); 
+            color: var(--app-black); 
             font-size: 0.8rem; 
             text-transform: uppercase; 
-            letter-spacing: 0.15em; 
-            font-weight: 500; 
-            padding: 6px 0; 
+            letter-spacing: 0.1em; 
+            font-weight: 600; 
+            padding: 8px 16px; 
+            border-radius: 20px;
             cursor: pointer; 
-            transition: all 0.3s; 
-            border-bottom: 2px solid transparent; 
+            transition: all 0.2s ease; 
         }
         .nav-link:hover, .nav-link.active { 
-            border-bottom-color: var(--dior-black); 
+            background-color: #f1f5f9;
         }
         .doctor-badge { 
-            background: var(--dior-soft-bg); 
-            color: var(--dior-black); 
+            background: #f1f5f9; 
+            color: var(--app-black); 
             padding: 8px 18px; 
-            border-radius: 30px; 
-            font-size: 0.75rem; 
-            text-transform: uppercase; 
-            letter-spacing: 0.1em; 
-            border: 1px solid var(--dior-border); 
-            margin-right: 15px; 
+            border-radius: 20px; 
+            font-size: 0.8rem; 
+            font-weight: 600;
+            border: 1px solid var(--app-border); 
+            margin-right: 10px; 
         }
 
-        /* HERO IMAGE BANNER */
+        /* HERO BANNER WITH ROUNDED CORNERS */
         .hero-section {
             position: relative;
-            width: 100%;
-            height: 280px;
+            max-width: 1100px;
+            width: calc(100% - 50px);
+            margin: 25px auto 0 auto;
+            height: 220px;
             overflow: hidden;
-            background-color: #000;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
         }
         .hero-section img {
             width: 100%;
             height: 100%;
             object-fit: cover;
-            opacity: 0.75;
-            filter: grayscale(20%);
+            filter: brightness(0.65);
         }
         .hero-overlay {
             position: absolute;
@@ -395,82 +395,69 @@ def index():
             align-items: center;
             color: #ffffff;
             text-align: center;
-            background: linear-gradient(180deg, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.6) 100%);
+            padding: 20px;
         }
         .hero-title {
             font-family: 'Playfair Display', serif;
-            font-size: 2.2rem;
-            font-weight: 400;
-            letter-spacing: 0.1em;
+            font-size: 2rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
             text-transform: uppercase;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
         }
         .hero-subtitle {
             font-size: 0.82rem;
-            letter-spacing: 0.25em;
+            letter-spacing: 0.2em;
             text-transform: uppercase;
-            opacity: 0.85;
+            opacity: 0.9;
             font-weight: 300;
         }
 
         /* MAIN LAYOUT */
-        .main-container { flex: 1; max-width: 1100px; width: 100%; margin: 40px auto; padding: 0 25px; }
+        .main-container { flex: 1; max-width: 1100px; width: 100%; margin: 30px auto; padding: 0 25px; }
         .page { display: none; }
-        .page.active-page { display: block; animation: fadeIn 0.4s ease-in-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .page.active-page { display: block; animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 
-        /* CARDS & PANELS */
+        /* ROUNDED CARDS */
         .card { 
             background: #ffffff; 
-            border: 1px solid var(--dior-border); 
-            padding: 40px; 
-            margin-bottom: 30px; 
+            border: 1px solid var(--app-border); 
+            border-radius: 16px; 
+            padding: 35px; 
+            margin-bottom: 25px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.02);
         }
-        .card-header-dior {
+        .card-header {
             font-family: 'Playfair Display', serif;
-            font-size: 1.5rem;
-            letter-spacing: 0.08em;
+            font-size: 1.4rem;
+            letter-spacing: 0.05em;
             text-transform: uppercase;
-            margin-bottom: 25px;
+            margin-bottom: 20px;
             padding-bottom: 12px;
-            border-bottom: 1px solid var(--dior-border);
-            color: var(--dior-black);
+            border-bottom: 1px solid var(--app-border);
+            color: var(--app-black);
         }
 
-        /* SIDE BY SIDE WITH IMAGE */
-        .grid-split {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 30px;
-            align-items: center;
-            margin-bottom: 30px;
-        }
-        .grid-split img {
-            width: 100%;
-            height: 100%;
-            max-height: 280px;
-            object-fit: cover;
-            border: 1px solid var(--dior-border);
-        }
-
-        /* BUTTONS DIOR STYLE */
+        /* ROUNDED BUTTONS */
         .btn { 
-            background-color: var(--dior-black); 
+            background-color: var(--app-black); 
             color: #ffffff; 
-            padding: 14px 32px; 
-            font-size: 0.78rem; 
+            padding: 12px 28px; 
+            font-size: 0.8rem; 
             font-weight: 600; 
             text-transform: uppercase; 
-            letter-spacing: 0.2em; 
-            border: 1px solid var(--dior-black); 
+            letter-spacing: 0.12em; 
+            border: 1px solid var(--app-black); 
+            border-radius: 25px; 
             cursor: pointer; 
-            transition: all 0.3s ease; 
+            transition: all 0.2s ease; 
             text-align: center; 
             display: inline-block;
         }
         .btn:hover { 
             background-color: #ffffff; 
-            color: var(--dior-black); 
+            color: var(--app-black); 
         }
         .btn-danger { 
             background-color: var(--danger-red); 
@@ -483,128 +470,134 @@ def index():
         }
         .btn-outline { 
             background-color: transparent; 
-            color: var(--dior-black); 
-            border: 1px solid var(--dior-black); 
+            color: var(--app-black); 
+            border: 1px solid var(--app-border); 
+        }
+        .btn-outline:hover {
+            border-color: var(--app-black);
+            background-color: #f8fafc;
         }
 
-        /* FORMS DIOR STYLE */
-        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 25px; }
-        .form-group { display: flex; flex-direction: column; gap: 8px; }
+        /* ROUNDED FORM INPUTS */
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px; margin-bottom: 22px; }
+        .form-group { display: flex; flex-direction: column; gap: 6px; }
         .form-group label { 
             font-size: 0.75rem; 
             text-transform: uppercase; 
-            letter-spacing: 0.12em; 
-            color: var(--dior-gray); 
+            letter-spacing: 0.08em; 
+            color: var(--app-gray); 
             font-weight: 600; 
         }
         .form-group input, .form-group select, .form-group textarea { 
-            padding: 12px 14px; 
-            border: 1px solid var(--dior-border); 
-            font-size: 0.88rem; 
+            padding: 12px 16px; 
+            border: 1px solid var(--app-border); 
+            border-radius: 10px; 
+            font-size: 0.9rem; 
             outline: none; 
-            background-color: var(--dior-light-gray); 
+            background-color: #f8fafc; 
             font-family: 'Inter', sans-serif;
-            transition: border 0.2s;
+            transition: all 0.2s ease;
         }
         .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
-            border-color: var(--dior-black);
+            border-color: var(--app-black);
             background-color: #ffffff;
+            box-shadow: 0 0 0 3px rgba(0,0,0,0.05);
         }
 
-        /* TABLES DIOR STYLE */
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { padding: 16px 18px; text-align: left; border-bottom: 1px solid var(--dior-border); font-size: 0.85rem; }
+        /* TABLES */
+        table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 15px; }
+        th, td { padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--app-border); font-size: 0.88rem; }
         th { 
-            background-color: var(--dior-light-gray); 
-            color: var(--dior-black); 
+            background-color: #f1f5f9; 
+            color: var(--app-black); 
             font-weight: 600; 
             text-transform: uppercase; 
-            letter-spacing: 0.1em; 
+            letter-spacing: 0.08em; 
             font-size: 0.75rem; 
         }
+        th:first-child { border-top-left-radius: 10px; }
+        th:last-child { border-top-right-radius: 10px; }
         .badge-benign { 
-            background-color: #f0fdf4; 
+            background-color: #e8f5e9; 
             color: var(--success-green); 
-            padding: 5px 12px; 
-            border: 1px solid #bbf7d0; 
-            font-size: 0.75rem; 
-            text-transform: uppercase; 
-            letter-spacing: 0.08em; 
+            padding: 6px 14px; 
+            border-radius: 20px; 
+            font-size: 0.78rem; 
+            font-weight: 600; 
         }
         .badge-malignant { 
-            background-color: #fef2f2; 
+            background-color: #ffebee; 
             color: var(--danger-red); 
-            padding: 5px 12px; 
-            border: 1px solid #fecaca; 
-            font-size: 0.75rem; 
-            text-transform: uppercase; 
-            letter-spacing: 0.08em; 
+            padding: 6px 14px; 
+            border-radius: 20px; 
+            font-size: 0.78rem; 
+            font-weight: 600; 
         }
 
-        /* FOOTER DIOR STYLE */
+        /* FOOTER */
         footer { 
-            background: var(--dior-black); 
-            color: #888888; 
+            background: #ffffff; 
+            color: var(--app-gray); 
             text-align: center; 
-            padding: 35px 20px; 
-            font-size: 0.72rem; 
+            padding: 25px 20px; 
+            font-size: 0.75rem; 
             text-transform: uppercase; 
-            letter-spacing: 0.25em; 
+            letter-spacing: 0.15em; 
             margin-top: auto; 
-            border-top: 1px solid #222;
+            border-top: 1px solid var(--app-border);
         }
     </style>
 </head>
 <body>
 
     <div class="top-notice">
-        Clinical AI Precision • Breast Cancer SVM Diagnostic System
+        Clinical AI Precision • Breast Cancer Diagnostic System
     </div>
 
     <header>
         <div class="logo-area">
-            <span>DIOR CLINIC AI</span>
+            <span>🩺 DOCTOR PORTAL AI</span>
         </div>
         <nav id="nav-menu"></nav>
     </header>
 
     <div class="hero-section">
-        <img src="https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?q=80&w=1600&auto=format&fit=crop" alt="Medical AI Banner">
+        <img src="https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?q=80&w=1600&auto=format&fit=crop" alt="Medical Banner">
         <div class="hero-overlay">
             <h1 class="hero-title">Precision Diagnostics</h1>
-            <p class="hero-subtitle">Support Vector Machine • Oncology Intelligence</p>
+            <p class="hero-subtitle">Support Vector Machine • Clinical Oncology AI</p>
         </div>
     </div>
 
     <div class="main-container">
         <!-- 1. ĐĂNG NHẬP / ĐĂNG KÝ -->
         <div id="auth-page" class="page active-page">
-            <div class="card" style="max-width: 480px; margin: 30px auto;">
-                <h2 class="card-header-dior" id="auth-title" style="text-align: center;">Đăng Nhập Bác Sĩ</h2>
+            <div class="card" style="max-width: 450px; margin: 20px auto;">
+                <h2 class="card-header" id="auth-title" style="text-align: center;">Đăng Nhập Bác Sĩ</h2>
                 <form id="auth-form" onsubmit="handleAuth(event)">
-                    <div class="form-group" style="margin-bottom: 20px;">
+                    <div class="form-group" style="margin-bottom: 18px;">
                         <label>Tài khoản Bác sĩ</label>
                         <input type="text" id="auth-username" required placeholder="dr_nguyen">
                     </div>
-                    <div class="form-group" style="margin-bottom: 20px;">
+                    <div class="form-group" style="margin-bottom: 18px;">
                         <label>Mật khẩu</label>
                         <input type="password" id="auth-password" required>
                     </div>
                     <div id="register-fields" style="display: none;">
-                        <div class="form-group" style="margin-bottom: 20px;">
+                        <div class="form-group" style="margin-bottom: 18px;">
                             <label>Họ và Tên Bác sĩ</label>
                             <input type="text" id="auth-fullname" placeholder="BS. Nguyễn Văn A">
                         </div>
-                        <div class="form-group" style="margin-bottom: 20px;">
+                        <div class="form-group" style="margin-bottom: 18px;">
                             <label>Bệnh viện / Phòng khám</label>
                             <input type="text" id="auth-hospital" placeholder="Bệnh viện Đà Nẵng">
                         </div>
                     </div>
                     <button type="submit" class="btn" style="width: 100%; margin-top: 10px;" id="auth-submit-btn">Đăng Nhập ➔</button>
                 </form>
-                <div style="text-align: center; margin-top: 25px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.1em;">
+                <div style="text-align: center; margin-top: 20px; font-size: 0.82rem;">
                     <span id="auth-toggle-text">Chưa có tài khoản Bác sĩ?</span>
-                    <a href="#" onclick="toggleAuthMode()" style="color: var(--dior-black); font-weight: 700; text-decoration: underline;" id="auth-toggle-link"> Đăng ký ngay</a>
+                    <a href="#" onclick="toggleAuthMode()" style="color: var(--app-black); font-weight: 700; text-decoration: underline;" id="auth-toggle-link"> Đăng ký ngay</a>
                 </div>
             </div>
         </div>
@@ -612,26 +605,16 @@ def index():
         <!-- 2. PHÂN TÍCH CHẨN ĐOÁN -->
         <div id="diagnose-page" class="page">
             <div class="card">
-                <h2 class="card-header-dior">Hồ Sơ Bệnh Nhân & Chỉ Số Sinh Học</h2>
-                
-                <div class="grid-split">
-                    <div>
-                        <p style="font-size: 0.88rem; color: var(--dior-gray); line-height: 1.6; margin-bottom: 15px;">
-                            Hệ thống AI hỗ trợ phân tích ma trận tế bào 30 chiều dựa trên thuật toán Support Vector Machine. Vui lòng kiểm tra kỹ các thông số trước khi thực hiện phân tích.
-                        </p>
-                    </div>
-                    <img src="https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?q=80&w=800&auto=format&fit=crop" alt="Cell Analysis">
-                </div>
-
+                <h2 class="card-header">📋 Nhập Hồ Sơ Bệnh Nhân & Chỉ Số Giải Phẫu</h2>
                 <form onsubmit="submitDiagnosis(event)">
-                    <h3 style="margin-bottom: 15px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.15em; color: var(--dior-black);">1. Thông tin bệnh nhân</h3>
+                    <h3 style="margin-bottom: 12px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--app-black);">1. Thông tin bệnh nhân</h3>
                     <div class="form-grid">
                         <div class="form-group"><label>Mã Bệnh Nhân</label><input type="text" id="p-id" required placeholder="BN-2026-001"></div>
                         <div class="form-group"><label>Họ và Tên Bệnh Nhân</label><input type="text" id="p-name" required placeholder="Trần Thị B"></div>
                         <div class="form-group"><label>Tuổi</label><input type="number" id="p-age" value="45" required></div>
                     </div>
 
-                    <h3 style="margin-bottom: 15px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.15em; color: var(--dior-black); margin-top: 25px;">2. Chỉ số sinh học & Thuật toán (SVM Features)</h3>
+                    <h3 style="margin-bottom: 12px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--app-black); margin-top: 20px;">2. Chỉ số sinh học & Thuật toán (SVM Features)</h3>
                     <div class="form-grid">
                         <div class="form-group">
                             <label>Chọn Kernel SVM</label>
@@ -652,7 +635,7 @@ def index():
                         <div class="form-group"><label>Độ nhẵn lớn nhất (Worst Smoothness)</label><input type="number" step="any" id="f24" value="0.132" required></div>
                     </div>
 
-                    <div class="form-group" style="margin-bottom: 25px;">
+                    <div class="form-group" style="margin-bottom: 22px;">
                         <label>Ghi chú lâm sàng của Bác sĩ</label>
                         <textarea id="p-notes" rows="2" placeholder="Bệnh nhân khám định kỳ..."></textarea>
                     </div>
@@ -665,10 +648,10 @@ def index():
         <!-- 3. LỊCH SỬ CHẨN ĐOÁN -->
         <div id="history-page" class="page">
             <div class="card">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; padding-bottom: 12px; border-bottom: 1px solid var(--dior-border);">
-                    <h2 class="card-header-dior" style="margin-bottom: 0; border-bottom: none; padding-bottom: 0;">Quản Lý Lịch Sử Bệnh Nhân</h2>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2 class="card-header" style="margin-bottom: 0; border-bottom: none; padding-bottom: 0;">Quản Lý Lịch Sử Bệnh Nhân</h2>
                     <div>
-                        <button class="btn btn-outline" onclick="exportCSV()" style="margin-right: 10px;">📥 Tải dữ liệu (CSV)</button>
+                        <button class="btn btn-outline" onclick="exportCSV()" style="margin-right: 8px;">📥 Tải dữ liệu (CSV)</button>
                         <button class="btn btn-outline" onclick="loadHistory()">🔄 Tải lại dữ liệu</button>
                     </div>
                 </div>
@@ -694,7 +677,7 @@ def index():
     </div>
 
     <footer>
-        Dior Clinic AI Platform • High Precision Oncology System
+        Doctor Portal • Breast Cancer Support Vector Machine AI
     </footer>
 
     <script>
@@ -852,7 +835,7 @@ def index():
                             <td>${r.diagnosis_date}</td>
                             <td><span class="${badgeClass}">${r.result_label}</span></td>
                             <td>${r.notes || '-'}</td>
-                            <td><button class="btn btn-danger" style="padding: 4px 10px; font-size:0.75rem;" onclick="deleteRecord(${r.id})">Xóa</button></td>
+                            <td><button class="btn btn-danger" style="padding: 5px 12px; font-size:0.75rem;" onclick="deleteRecord(${r.id})">Xóa</button></td>
                         </tr>
                     `;
                 });
