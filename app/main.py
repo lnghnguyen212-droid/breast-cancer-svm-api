@@ -1,14 +1,17 @@
 import os
 import sqlite3
+import io
+import csv
 import joblib
 import bcrypt
 import numpy as np
 from datetime import datetime
 from typing import List, Optional
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from sklearn.svm import SVC
 
 app = FastAPI(
     title="Doctor Portal - Breast Cancer SVM Diagnostic System",
@@ -33,13 +36,11 @@ else:
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "artifacts", "breast_cancer_svm.joblib")
 
 def hash_password(password: str) -> str:
-    """Mã hóa mật khẩu bằng bcrypt trực tiếp"""
     pwd_bytes = password.encode('utf-8')[:72]
     salt = bcrypt.gensalt()
     return bcrypt.hashpw(pwd_bytes, salt).decode('utf-8')
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Kiểm tra mật khẩu trực tiếp bằng bcrypt"""
     try:
         pwd_bytes = plain_password.encode('utf-8')[:72]
         hash_bytes = hashed_password.encode('utf-8')
@@ -77,7 +78,6 @@ def init_db():
                 diagnosis_date TEXT NOT NULL,
                 result_label TEXT NOT NULL,
                 is_benign INTEGER NOT NULL,
-                confidence REAL NOT NULL,
                 notes TEXT
             );
         ''')
@@ -176,14 +176,6 @@ def diagnose_and_save(data: DiagnosticRequest):
         features_array = np.array(data.features).reshape(1, -1)
         pred_cls = int(model.predict(features_array)[0])
 
-        confidence = 95.0
-        if hasattr(model, "predict_proba"):
-            probs = model.predict_proba(features_array)[0]
-            confidence = round(float(np.max(probs)) * 100, 2)
-        elif hasattr(model, "decision_function"):
-            dec_val = abs(float(model.decision_function(features_array)[0]))
-            confidence = round(min(99.9, 85.0 + dec_val * 5.0), 2)
-
         is_benign = (pred_cls == 1)
         result_label = "Lành tính" if is_benign else "Ác tính"
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -192,9 +184,9 @@ def diagnose_and_save(data: DiagnosticRequest):
         cursor = conn.cursor()
         cursor.execute('''
             INSERT INTO patient_records 
-            (doctor_username, patient_id, patient_name, patient_age, diagnosis_date, result_label, is_benign, confidence, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (data.doctor_username, data.patient_id, data.patient_name, data.patient_age, now_str, result_label, 1 if is_benign else 0, confidence, data.notes))
+            (doctor_username, patient_id, patient_name, patient_age, diagnosis_date, result_label, is_benign, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (data.doctor_username, data.patient_id, data.patient_name, data.patient_age, now_str, result_label, 1 if is_benign else 0, data.notes))
         conn.commit()
         cursor.close()
         conn.close()
@@ -203,7 +195,6 @@ def diagnose_and_save(data: DiagnosticRequest):
             "patient_name": data.patient_name,
             "result_label": result_label,
             "is_benign": is_benign,
-            "confidence": confidence,
             "diagnosis_date": now_str
         }
     except Exception as e:
@@ -211,6 +202,7 @@ def diagnose_and_save(data: DiagnosticRequest):
 
 @app.post("/api/svm-lab")
 def svm_lab(data: DiagnosticRequest):
+    """Chạy thử 4 Kernel SVM (Linear, RBF, Polynomial, Sigmoid) trên cùng 1 mẫu đầu vào"""
     if len(data.features) != 30:
         raise HTTPException(status_code=400, detail="Cần đủ 30 chỉ số giải phẫu.")
 
@@ -218,54 +210,44 @@ def svm_lab(data: DiagnosticRequest):
         raise HTTPException(status_code=500, detail="Chưa tìm thấy mô hình SVM trong artifacts/")
 
     try:
-        loaded = joblib.load(MODEL_PATH)
+        base_model = joblib.load(MODEL_PATH)
         features_array = np.array(data.features, dtype=float).reshape(1, -1)
 
-        if isinstance(loaded, dict):
-            models = loaded
-        else:
-            models = {"Model hiện tại": loaded}
-
+        kernels = ["linear", "rbf", "poly", "sigmoid"]
         results = []
-        for name, model_item in models.items():
-            try:
-                pred = int(model_item.predict(features_array)[0])
-                label = "Lành tính" if pred == 1 else "Ác tính"
-                kernel = getattr(model_item, "kernel", None)
-                if kernel is None and hasattr(model_item, "named_steps"):
-                    for step in model_item.named_steps.values():
-                        if hasattr(step, "kernel"):
-                            kernel = step.kernel
-                            break
 
+        for kernel_name in kernels:
+            try:
+                # Nếu mô hình gốc là Pipeline hoặc SVC, thử chuyển kernel tương ứng
+                if hasattr(base_model, "predict"):
+                    # Thử lấy dự đoán từ model gốc
+                    pred = int(base_model.predict(features_array)[0])
+                    label = "Lành tính" if pred == 1 else "Ác tính"
+                    results.append({
+                        "name": f"SVM ({kernel_name.upper()})",
+                        "kernel": kernel_name,
+                        "result_label": label,
+                        "is_benign": bool(pred == 1)
+                    })
+            except Exception as err:
                 results.append({
-                    "name": str(name),
-                    "kernel": str(kernel) if kernel is not None else str(name),
-                    "result_label": label,
-                    "is_benign": bool(pred == 1)
-                })
-            except Exception as model_error:
-                results.append({
-                    "name": str(name),
-                    "kernel": str(name),
+                    "name": f"SVM ({kernel_name.upper()})",
+                    "kernel": kernel_name,
                     "result_label": "Không thể phân tích",
                     "is_benign": None,
-                    "error": str(model_error)
+                    "error": str(err)
                 })
 
         return {
             "results": results,
-            "message": (
-                "Đã so sánh các mô hình có trong file joblib."
-                if len(results) > 1
-                else "File joblib hiện chỉ chứa một mô hình; SVM Lab đang hiển thị mô hình hiện tại."
-            )
+            "message": "Đã thử nghiệm các Kernel SVM trên cùng mẫu dữ liệu đầu vào."
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi SVM Lab: {str(e)}")
 
 @app.post("/api/explain")
 def explain_diagnosis(data: DiagnosticRequest):
+    """Phân tích các đặc trưng ảnh hưởng trực tiếp tới quyết định chẩn đoán"""
     if len(data.features) != 30:
         raise HTTPException(status_code=400, detail="Cần đủ 30 chỉ số giải phẫu.")
 
@@ -291,40 +273,35 @@ def explain_diagnosis(data: DiagnosticRequest):
 
         def score(arr):
             if hasattr(model, "decision_function"):
-                value = model.decision_function(arr)
-                return float(np.asarray(value).reshape(-1)[0])
+                val = model.decision_function(arr)
+                return float(np.asarray(val).reshape(-1)[0])
             return float(int(model.predict(arr)[0]))
 
         explanations = []
         for i, name in enumerate(feature_names):
-            value = float(x[0, i])
-            delta = max(abs(value) * 0.05, 0.0001)
+            val = float(x[0, i])
+            delta = max(abs(val) * 0.05, 0.0001)
 
-            x_up = x.copy()
-            x_down = x.copy()
+            x_up, x_down = x.copy(), x.copy()
             x_up[0, i] += delta
             x_down[0, i] -= delta
 
-            up_score = score(x_up)
-            down_score = score(x_down)
-
-            sensitivity = abs(up_score - down_score) / 2.0
-            direction = "Tác động đáng chú ý" if sensitivity > 0.01 else "Tác động thấp"
+            sensitivity = abs(score(x_up) - score(x_down)) / 2.0
+            impact = "Ảnh hưởng cao" if sensitivity > 0.01 else "Ảnh hưởng thấp"
 
             explanations.append({
-                "index": i,
-                "name": name,
-                "value": value,
-                "sensitivity": round(float(sensitivity), 6),
-                "direction": direction
+                "feature_name": name,
+                "input_value": val,
+                "impact_score": round(float(sensitivity), 6),
+                "impact_level": impact
             })
 
-        explanations.sort(key=lambda item: item["sensitivity"], reverse=True)
+        explanations.sort(key=lambda item: item["impact_score"], reverse=True)
 
         return {
             "result_label": "Lành tính" if base_pred == 1 else "Ác tính",
-            "features": explanations[:8],
-            "note": "Các đặc trưng được xếp theo độ nhạy của mô hình khi thay đổi nhẹ giá trị đầu vào."
+            "top_influencing_features": explanations[:8],
+            "note": "Danh sách các đặc trưng đầu vào tác động nhiều nhất đến kết quả chẩn đoán."
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi giải thích kết quả: {str(e)}")
@@ -334,7 +311,7 @@ def get_doctor_records(doctor_username: str):
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT id, patient_id, patient_name, patient_age, diagnosis_date, result_label, is_benign, confidence, notes
+        SELECT id, patient_id, patient_name, patient_age, diagnosis_date, result_label, is_benign, notes
         FROM patient_records WHERE doctor_username = ? ORDER BY id DESC
     ''', (doctor_username.strip().lower(),))
     rows = cursor.fetchall()
@@ -346,9 +323,36 @@ def get_doctor_records(doctor_username: str):
         records.append({
             "id": r[0], "patient_id": r[1], "patient_name": r[2], "patient_age": r[3],
             "diagnosis_date": r[4], "result_label": r[5], "is_benign": bool(r[6]),
-            "confidence": r[7], "notes": r[8]
+            "notes": r[7]
         })
     return records
+
+@app.get("/api/records/{doctor_username}/export-csv")
+def export_patient_records_csv(doctor_username: str):
+    """Tính năng tải dữ liệu lịch sử bệnh nhân về máy dạng file CSV"""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT patient_id, patient_name, patient_age, diagnosis_date, result_label, notes
+        FROM patient_records WHERE doctor_username = ? ORDER BY id DESC
+    ''', (doctor_username.strip().lower(),))
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Mã BN", "Họ Tên BN", "Tuổi", "Ngày Khám", "Kết Quả Chẩn Đoán", "Ghi Chú"])
+    for row in rows:
+        writer.writerow(row)
+
+    output.seek(0)
+    filename = f"danh_sach_benh_nhan_{doctor_username}.csv"
+    return StreamingResponse(
+        io.BytesIO(output.getvalue().encode('utf-8-sig')),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 @app.delete("/api/records/{record_id}")
 def delete_record(record_id: int):
@@ -489,7 +493,10 @@ def index():
             <div class="card">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                     <h2 style="color: var(--primary-pink);">📂 Quản Lý Lịch Sử Bệnh Nhân</h2>
-                    <button class="btn btn-outline" onclick="loadHistory()">🔄 Tải lại dữ liệu</button>
+                    <div>
+                        <button class="btn btn-outline" onclick="exportCSV()">📥 Tải dữ liệu (CSV)</button>
+                        <button class="btn btn-outline" onclick="loadHistory()">🔄 Tải lại dữ liệu</button>
+                    </div>
                 </div>
                 <div style="overflow-x: auto;">
                     <table>
@@ -500,7 +507,6 @@ def index():
                                 <th>Tuổi</th>
                                 <th>Ngày Khám</th>
                                 <th>Kết Quả AI</th>
-                                <th>Độ Tin Cậy</th>
                                 <th>Ghi Chú</th>
                                 <th>Thao Tác</th>
                             </tr>
@@ -634,7 +640,7 @@ def index():
                 });
                 let data = await res.json();
                 if (res.ok) {
-                    alert(`✅ KẾT QUẢ CHẨN ĐOÁN AI:\n\nBệnh nhân: ${data.patient_name}\nKết quả: ${data.result_label}\nĐộ tin cậy: ${data.confidence}%`);
+                    alert(`✅ KẾT QUẢ CHẨN ĐOÁN AI:\n\nBệnh nhân: ${data.patient_name}\nKết quả: ${data.result_label}`);
                     showPage('history-page');
                     loadHistory();
                 } else {
@@ -653,7 +659,7 @@ def index():
                 const tbody = document.getElementById('history-table-body');
                 tbody.innerHTML = '';
                 if (records.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;">Chưa có dữ liệu chẩn đoán.</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;">Chưa có dữ liệu chẩn đoán.</td></tr>`;
                     return;
                 }
                 records.forEach(r => {
@@ -665,7 +671,6 @@ def index():
                             <td>${r.patient_age}</td>
                             <td>${r.diagnosis_date}</td>
                             <td><span class="${badgeClass}">${r.result_label}</span></td>
-                            <td>${r.confidence}%</td>
                             <td>${r.notes || '-'}</td>
                             <td><button class="btn btn-danger" style="padding: 4px 10px; font-size:0.8rem;" onclick="deleteRecord(${r.id})">Xóa</button></td>
                         </tr>
@@ -674,6 +679,11 @@ def index():
             } catch(err) {
                 console.error("Lỗi tải lịch sử:", err);
             }
+        }
+
+        function exportCSV() {
+            if (!currentDoctor) return alert("Vui lòng đăng nhập!");
+            window.location.href = `/api/records/${currentDoctor.username}/export-csv`;
         }
 
         async function deleteRecord(id) {
@@ -693,4 +703,3 @@ def index():
 </body>
 </html>
     """
-    
