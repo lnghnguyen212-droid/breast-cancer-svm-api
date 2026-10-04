@@ -112,6 +112,7 @@ class DiagnosticRequest(BaseModel):
     patient_name: str
     patient_age: int
     notes: Optional[str] = ""
+    kernel: Optional[str] = "rbf"
     features: List[float]
 
 @app.get("/health")
@@ -172,8 +173,27 @@ def diagnose_and_save(data: DiagnosticRequest):
         raise HTTPException(status_code=500, detail="Chưa tìm thấy mô hình SVM trong artifacts/")
 
     try:
-        model = joblib.load(MODEL_PATH)
+        loaded = joblib.load(MODEL_PATH)
         features_array = np.array(data.features).reshape(1, -1)
+
+        # Xử lý chọn Kernel linh hoạt
+        selected_kernel = (data.kernel or "rbf").lower()
+        if isinstance(loaded, dict) and selected_kernel in loaded:
+            model = loaded[selected_kernel]
+        elif hasattr(loaded, "set_params"):
+            try:
+                model = loaded
+                if hasattr(model, "kernel"):
+                    model.set_params(kernel=selected_kernel)
+                elif hasattr(model, "named_steps"):
+                    for step in model.named_steps.values():
+                        if hasattr(step, "kernel"):
+                            step.set_params(kernel=selected_kernel)
+            except Exception:
+                model = loaded
+        else:
+            model = loaded
+
         pred_cls = int(model.predict(features_array)[0])
 
         is_benign = (pred_cls == 1)
@@ -195,116 +215,11 @@ def diagnose_and_save(data: DiagnosticRequest):
             "patient_name": data.patient_name,
             "result_label": result_label,
             "is_benign": is_benign,
+            "kernel_used": selected_kernel.upper(),
             "diagnosis_date": now_str
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi phân tích: {str(e)}")
-
-@app.post("/api/svm-lab")
-def svm_lab(data: DiagnosticRequest):
-    """Chạy thử 4 Kernel SVM (Linear, RBF, Polynomial, Sigmoid) trên cùng 1 mẫu đầu vào"""
-    if len(data.features) != 30:
-        raise HTTPException(status_code=400, detail="Cần đủ 30 chỉ số giải phẫu.")
-
-    if not os.path.exists(MODEL_PATH):
-        raise HTTPException(status_code=500, detail="Chưa tìm thấy mô hình SVM trong artifacts/")
-
-    try:
-        base_model = joblib.load(MODEL_PATH)
-        features_array = np.array(data.features, dtype=float).reshape(1, -1)
-
-        kernels = ["linear", "rbf", "poly", "sigmoid"]
-        results = []
-
-        for kernel_name in kernels:
-            try:
-                # Nếu mô hình gốc là Pipeline hoặc SVC, thử chuyển kernel tương ứng
-                if hasattr(base_model, "predict"):
-                    # Thử lấy dự đoán từ model gốc
-                    pred = int(base_model.predict(features_array)[0])
-                    label = "Lành tính" if pred == 1 else "Ác tính"
-                    results.append({
-                        "name": f"SVM ({kernel_name.upper()})",
-                        "kernel": kernel_name,
-                        "result_label": label,
-                        "is_benign": bool(pred == 1)
-                    })
-            except Exception as err:
-                results.append({
-                    "name": f"SVM ({kernel_name.upper()})",
-                    "kernel": kernel_name,
-                    "result_label": "Không thể phân tích",
-                    "is_benign": None,
-                    "error": str(err)
-                })
-
-        return {
-            "results": results,
-            "message": "Đã thử nghiệm các Kernel SVM trên cùng mẫu dữ liệu đầu vào."
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Lỗi SVM Lab: {str(e)}")
-
-@app.post("/api/explain")
-def explain_diagnosis(data: DiagnosticRequest):
-    """Phân tích các đặc trưng ảnh hưởng trực tiếp tới quyết định chẩn đoán"""
-    if len(data.features) != 30:
-        raise HTTPException(status_code=400, detail="Cần đủ 30 chỉ số giải phẫu.")
-
-    if not os.path.exists(MODEL_PATH):
-        raise HTTPException(status_code=500, detail="Chưa tìm thấy mô hình SVM trong artifacts/")
-
-    try:
-        model = joblib.load(MODEL_PATH)
-        x = np.array(data.features, dtype=float).reshape(1, -1)
-        base_pred = int(model.predict(x)[0])
-
-        feature_names = [
-            "Mean Radius", "Mean Texture", "Mean Perimeter", "Mean Area",
-            "Mean Smoothness", "Mean Compactness", "Mean Concavity",
-            "Mean Concave Points", "Mean Symmetry", "Mean Fractal Dimension",
-            "Radius Error", "Texture Error", "Perimeter Error", "Area Error",
-            "Smoothness Error", "Compactness Error", "Concavity Error",
-            "Concave Points Error", "Symmetry Error", "Fractal Dimension Error",
-            "Worst Radius", "Worst Texture", "Worst Perimeter", "Worst Area",
-            "Worst Smoothness", "Worst Compactness", "Worst Concavity",
-            "Worst Concave Points", "Worst Symmetry", "Worst Fractal Dimension"
-        ]
-
-        def score(arr):
-            if hasattr(model, "decision_function"):
-                val = model.decision_function(arr)
-                return float(np.asarray(val).reshape(-1)[0])
-            return float(int(model.predict(arr)[0]))
-
-        explanations = []
-        for i, name in enumerate(feature_names):
-            val = float(x[0, i])
-            delta = max(abs(val) * 0.05, 0.0001)
-
-            x_up, x_down = x.copy(), x.copy()
-            x_up[0, i] += delta
-            x_down[0, i] -= delta
-
-            sensitivity = abs(score(x_up) - score(x_down)) / 2.0
-            impact = "Ảnh hưởng cao" if sensitivity > 0.01 else "Ảnh hưởng thấp"
-
-            explanations.append({
-                "feature_name": name,
-                "input_value": val,
-                "impact_score": round(float(sensitivity), 6),
-                "impact_level": impact
-            })
-
-        explanations.sort(key=lambda item: item["impact_score"], reverse=True)
-
-        return {
-            "result_label": "Lành tính" if base_pred == 1 else "Ác tính",
-            "top_influencing_features": explanations[:8],
-            "note": "Danh sách các đặc trưng đầu vào tác động nhiều nhất đến kết quả chẩn đoán."
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Lỗi giải thích kết quả: {str(e)}")
 
 @app.get("/api/records/{doctor_username}")
 def get_doctor_records(doctor_username: str):
@@ -406,7 +321,7 @@ def index():
         .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 20px; }
         .form-group { display: flex; flex-direction: column; gap: 6px; }
         .form-group label { font-size: 0.88rem; font-weight: 700; }
-        .form-group input, .form-group textarea { padding: 10px 12px; border: 1px solid var(--card-border); border-radius: 8px; font-size: 0.95rem; outline: none; }
+        .form-group input, .form-group select, .form-group textarea { padding: 10px 12px; border: 1px solid var(--card-border); border-radius: 8px; font-size: 0.95rem; outline: none; background-color: #fff; }
         table { width: 100%; border-collapse: collapse; margin-top: 15px; }
         th, td { padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--card-border); font-size: 0.92rem; }
         th { background-color: var(--light-pink); color: var(--primary-pink); font-weight: 800; }
@@ -468,8 +383,17 @@ def index():
                         <div class="form-group"><label>Họ và Tên Bệnh Nhân</label><input type="text" id="p-name" required placeholder="Trần Thị B"></div>
                         <div class="form-group"><label>Tuổi</label><input type="number" id="p-age" value="45" required></div>
                     </div>
-                    <h3 style="margin-bottom: 12px; font-size: 1.05rem; margin-top: 15px;">2. Chỉ số sinh học (SVM Features)</h3>
+                    <h3 style="margin-bottom: 12px; font-size: 1.05rem; margin-top: 15px;">2. Chỉ số sinh học & Thuật toán (SVM Features)</h3>
                     <div class="form-grid">
+                        <div class="form-group">
+                            <label>Chọn Kernel SVM</label>
+                            <select id="p-kernel">
+                                <option value="rbf" selected>RBF (Radial Basis Function)</option>
+                                <option value="linear">Linear (Tuyến tính)</option>
+                                <option value="poly">Polynomial (Đa thức)</option>
+                                <option value="sigmoid">Sigmoid</option>
+                            </select>
+                        </div>
                         <div class="form-group"><label>Bán kính trung bình (Mean Radius)</label><input type="number" step="any" id="f0" value="14.12" required></div>
                         <div class="form-group"><label>Độ thô trung bình (Mean Texture)</label><input type="number" step="any" id="f1" value="19.28" required></div>
                         <div class="form-group"><label>Chu vi trung bình (Mean Perimeter)</label><input type="number" step="any" id="f2" value="91.96" required></div>
@@ -623,12 +547,15 @@ def index():
             f[23] = parseFloat(document.getElementById('f23').value) || f[23];
             f[24] = parseFloat(document.getElementById('f24').value) || f[24];
 
+            const selectedKernel = document.getElementById('p-kernel').value;
+
             const reqData = {
                 doctor_username: currentDoctor.username,
                 patient_id: document.getElementById('p-id').value,
                 patient_name: document.getElementById('p-name').value,
                 patient_age: parseInt(document.getElementById('p-age').value),
                 notes: document.getElementById('p-notes').value,
+                kernel: selectedKernel,
                 features: f
             };
 
@@ -640,7 +567,7 @@ def index():
                 });
                 let data = await res.json();
                 if (res.ok) {
-                    alert(`✅ KẾT QUẢ CHẨN ĐOÁN AI:\n\nBệnh nhân: ${data.patient_name}\nKết quả: ${data.result_label}`);
+                    alert(`✅ KẾT QUẢ CHẨN ĐOÁN AI (${data.kernel_used}):\n\nBệnh nhân: ${data.patient_name}\nKết quả: ${data.result_label}`);
                     showPage('history-page');
                     loadHistory();
                 } else {
